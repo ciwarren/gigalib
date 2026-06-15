@@ -15,7 +15,7 @@ import os
 TASK_NAME = "GigaLib"
 APP_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 PYTHON_EXE = os.path.join(APP_DIR, ".venv", "Scripts", "python.exe")
-SERVE_SCRIPT = os.path.join(APP_DIR, "serve.py")
+SERVE_SCRIPT = os.path.join(APP_DIR, "scripts", "serve.py")
 
 
 def install():
