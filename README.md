@@ -74,7 +74,7 @@ ubisoft:
 **Development:**
 
 ```powershell
-uv run python run.py
+uv run python scripts/run.py
 ```
 
 Open http://127.0.0.1:5000
@@ -82,7 +82,7 @@ Open http://127.0.0.1:5000
 **Production:**
 
 ```powershell
-uv run python serve.py --host 0.0.0.0 --port 8080
+uv run python scripts/serve.py --host 0.0.0.0 --port 8080
 ```
 
 ## Usage
@@ -96,13 +96,10 @@ uv run python serve.py --host 0.0.0.0 --port 8080
 
 ```
 Gigalib/
-├── run.py              # Dev server entry point (Flask debug mode)
-├── serve.py            # Production server (waitress)
-├── enrich.py           # CLI enrichment tool
 ├── platforms.yaml      # Platform path configuration
 ├── pyproject.toml      # Dependencies and project metadata
 ├── .env                # API keys (not committed)
-├── gigalib/
+├── gigalib/            # The package
 │   ├── __init__.py     # Package init, create_app factory
 │   ├── app.py          # Flask app configuration
 │   ├── routes.py       # All HTTP routes
@@ -112,6 +109,9 @@ Gigalib/
 │   ├── assistant.py    # Gemini AI chat integration
 │   └── templates/      # Jinja2 HTML templates
 ├── scripts/
+│   ├── run.py          # Dev server (Flask debug mode)
+│   ├── serve.py        # Production server (waitress)
+│   ├── enrich.py       # CLI enrichment tool
 │   ├── setup.ps1       # Interactive setup wizard
 │   └── install_service.py  # Windows Task Scheduler service installer
 └── instance/
