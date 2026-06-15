@@ -1,0 +1,20 @@
+[project]
+name = "gigalib"
+version = "0.1.0"
+description = "Aggregate all your games with an AI-powered backlog assistant"
+requires-python = ">=3.11"
+dependencies = [
+    "apscheduler>=3.11.2",
+    "flask>=3.1.3",
+    "flask-sqlalchemy>=3.1.1",
+    "google-genai>=2.8.0",
+    "howlongtobeatpy>=1.0.21",
+    "pycryptodome>=3.20.0",
+    "python-dotenv>=1.2.2",
+    "pyyaml>=6.0.3",
+    "requests>=2.34.2",
+    "waitress>=3.0.2",
+]
+
+[project.scripts]
+gigalib = "gigalib.serve:app"

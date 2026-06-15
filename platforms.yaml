@@ -1,0 +1,19 @@
+# GigaLib Platform Configuration
+# Add/remove paths as needed for your system. All paths are checked — missing ones are skipped.
+
+steam:
+  paths:
+    - "C:\\Program Files (x86)\\Steam"
+    - "D:\\SteamLibrary"
+
+ea:
+  install_data:
+    - "C:\\ProgramData\\EA Desktop\\InstallData"
+  games_dirs:
+    - "C:\\Program Files\\EA Games"
+
+ubisoft:
+  config_cache:
+    - "C:\\Program Files (x86)\\Ubisoft\\Ubisoft Game Launcher\\cache\\configuration\\configurations"
+  games_dirs:
+    - "C:\\Program Files (x86)\\Ubisoft\\Ubisoft Game Launcher\\games"

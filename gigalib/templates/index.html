@@ -1,0 +1,223 @@
+{% extends "base.html" %}
+
+{% block content %}
+<div class="container">
+    <div class="layout">
+        <!-- Game Library -->
+        <div class="library-section">
+            <div class="library-header">
+                <h2>Library ({{ games|length }} games)</h2>
+                <div class="filters">
+                    <button class="filter-btn active" onclick="filterGames('all')">All</button>
+                    {% for platform in platforms %}
+                    <button class="filter-btn" onclick="filterGames('{{ platform }}')">{{ platform|capitalize }}</button>
+                    {% endfor %}
+                    <button class="filter-btn" id="installedToggle" onclick="toggleInstalled()">Installed</button>
+                    <button class="filter-btn" id="multiplayerToggle" onclick="toggleMultiplayer()">Multiplayer</button>
+                    <select id="sortSelect" onchange="sortGames(this.value)" style="margin-left:auto;padding:0.4rem 0.6rem;border-radius:10px;border:1px solid var(--border);background:var(--bg-primary);color:var(--text-secondary);font-size:0.8rem;cursor:pointer;">
+                        <option value="title-asc">A → Z</option>
+                        <option value="title-desc">Z → A</option>
+                        <option value="playtime-desc">Most Played</option>
+                        <option value="playtime-asc">Least Played</option>
+                        <option value="rating-desc">Highest Rated</option>
+                        <option value="platform-asc">Platform</option>
+                    </select>
+                </div>
+                <div style="margin-top:0.75rem;">
+                    <input type="text" id="searchInput" placeholder="Search games..." oninput="searchGames(this.value)"
+                           style="width:100%;padding:0.5rem 1rem;border-radius:10px;border:1px solid var(--border);background:var(--bg-primary);color:var(--text-primary);font-size:0.85rem;outline:none;">
+                </div>
+            </div>
+
+            {% if games %}
+            <div class="game-grid" id="gameGrid">
+                {% for game in games %}
+                <div class="game-card" data-platform="{{ game.platform }}" data-title="{{ game.title }}" data-playtime="{{ game.playtime_hours or 0 }}" data-rating="{{ game.critic_rating or 0 }}" data-installed="{{ game.is_installed|int }}" data-multiplayer="{{ game.is_multiplayer|int }}" onclick="showGameDetail({{ game.id }})">
+                    {% if game.image_url %}
+                    <img src="{{ game.image_url }}" alt="{{ game.title }}" loading="lazy"
+                         onerror="this.style.display='none';this.nextElementSibling.style.display='flex';">
+                    <div class="no-img" style="display:none;">🎮</div>
+                    {% else %}
+                    <div class="no-img">🎮</div>
+                    {% endif %}
+                    <div class="game-info">
+                        <h3 title="{{ game.title }}">{{ game.title }}</h3>
+                        <div class="game-meta">
+                            <span class="platform-badge platform-{{ game.platform }}">{{ game.platform }}</span>
+                            {% if game.playtime_hours %}
+                            <span class="playtime">{{ game.playtime_hours }}h</span>
+                            {% endif %}
+                        </div>
+                    </div>
+                </div>
+                {% endfor %}
+            </div>
+            {% else %}
+            <div class="empty-state">
+                <h3>No games yet</h3>
+                <p>Click "Sync All" to pull from Steam/Xbox, or add games manually.</p>
+            </div>
+            {% endif %}
+        </div>
+
+        <!-- AI Assistant -->
+        <div class="assistant-panel">
+            <div class="assistant-header">
+                <div class="dot"></div>
+                <h3>GigaLib AI</h3>
+                <span style="font-size: 0.7rem; color: var(--text-secondary); margin-left: auto;">Gemini 3.5 Flash</span>
+            </div>
+            <div class="chat-messages" id="chatMessages">
+                <div class="message message-ai">
+                    Hey! I'm your backlog boss with full access to your library data. I can:<br><br>
+                    🎮 Recommend games based on mood/time<br>
+                    📊 Answer questions about your library<br>
+                    🔍 Filter, compare, and analyze your games<br>
+                    ⏱️ Track completion progress<br><br>
+                    Try: "How many unplayed games do I have?" or "Something intense for 30 minutes"
+                </div>
+            </div>
+            <div class="chat-input-area">
+                <input type="text" id="chatInput" placeholder="e.g. Something chill for 2 hours..."
+                       onkeypress="if(event.key==='Enter')sendMessage()">
+                <button onclick="sendMessage()">Send</button>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+    // Sort games
+    function sortGames(criteria) {
+        const grid = document.getElementById('gameGrid');
+        const cards = Array.from(grid.querySelectorAll('.game-card'));
+        
+        cards.sort((a, b) => {
+            switch(criteria) {
+                case 'title-asc':
+                    return a.dataset.title.localeCompare(b.dataset.title);
+                case 'title-desc':
+                    return b.dataset.title.localeCompare(a.dataset.title);
+                case 'playtime-desc':
+                    return parseFloat(b.dataset.playtime) - parseFloat(a.dataset.playtime);
+                case 'playtime-asc':
+                    return parseFloat(a.dataset.playtime) - parseFloat(b.dataset.playtime);
+                case 'rating-desc':
+                    return parseFloat(b.dataset.rating) - parseFloat(a.dataset.rating);
+                case 'platform-asc':
+                    return a.dataset.platform.localeCompare(b.dataset.platform);
+                default:
+                    return 0;
+            }
+        });
+
+        cards.forEach(card => grid.appendChild(card));
+    }
+
+    // --- Filtering state ---
+    let activeFilters = { platform: 'all', search: '', installed: false, multiplayer: false };
+
+    function applyFilters() {
+        let visible_count = 0;
+        const total = document.querySelectorAll('.game-card').length;
+        document.querySelectorAll('.game-card').forEach(card => {
+            let visible = true;
+            if (activeFilters.platform !== 'all' && card.dataset.platform !== activeFilters.platform) visible = false;
+            if (activeFilters.search && !card.dataset.title.toLowerCase().includes(activeFilters.search)) visible = false;
+            if (activeFilters.installed && card.dataset.installed !== '1') visible = false;
+            if (activeFilters.multiplayer && card.dataset.multiplayer !== '1') visible = false;
+            card.style.display = visible ? '' : 'none';
+            if (visible) visible_count++;
+        });
+        const header = document.querySelector('.library-header h2');
+        header.textContent = visible_count === total
+            ? `Library (${total} games)`
+            : `Library (${visible_count} / ${total} games)`;
+    }
+
+    function filterGames(platform) {
+        document.querySelectorAll('.filter-btn:not(#installedToggle):not(#multiplayerToggle)').forEach(b => b.classList.remove('active'));
+        event.target.classList.add('active');
+        activeFilters.platform = platform;
+        applyFilters();
+    }
+
+    function searchGames(query) {
+        activeFilters.search = query.toLowerCase();
+        applyFilters();
+    }
+
+    function toggleInstalled() {
+        activeFilters.installed = !activeFilters.installed;
+        document.getElementById('installedToggle').classList.toggle('active', activeFilters.installed);
+        applyFilters();
+    }
+
+    function toggleMultiplayer() {
+        activeFilters.multiplayer = !activeFilters.multiplayer;
+        document.getElementById('multiplayerToggle').classList.toggle('active', activeFilters.multiplayer);
+        applyFilters();
+    }
+
+    // Conversation history
+    let chatHistory = [];
+
+    // AI Chat
+    async function sendMessage() {
+        const input = document.getElementById('chatInput');
+        const message = input.value.trim();
+        if (!message) return;
+
+        const chatMessages = document.getElementById('chatMessages');
+
+        // Add user message to UI
+        const userDiv = document.createElement('div');
+        userDiv.className = 'message message-user';
+        userDiv.textContent = message;
+        chatMessages.appendChild(userDiv);
+
+        // Add to history
+        chatHistory.push({ role: 'user', content: message });
+
+        input.value = '';
+        chatMessages.scrollTop = chatMessages.scrollHeight;
+
+        // Show typing indicator
+        const typingDiv = document.createElement('div');
+        typingDiv.className = 'message message-ai';
+        typingDiv.innerHTML = '<em>Thinking...</em>';
+        chatMessages.appendChild(typingDiv);
+        chatMessages.scrollTop = chatMessages.scrollHeight;
+
+        try {
+            const resp = await fetch('/assistant', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ message, history: chatHistory.slice(0, -1) })
+            });
+            const data = await resp.json();
+
+            typingDiv.innerHTML = formatResponse(data.response);
+
+            // Add assistant response to history
+            chatHistory.push({ role: 'assistant', content: data.response });
+        } catch(e) {
+            typingDiv.innerHTML = 'Sorry, something went wrong. Try again!';
+            chatHistory.pop(); // remove the failed user message from history
+        }
+
+        chatMessages.scrollTop = chatMessages.scrollHeight;
+    }
+
+    function formatResponse(text) {
+        // Convert markdown to HTML
+        return text
+            .replace(/\*\*(.*?)\*\*/g, '<strong>$1</strong>')
+            .replace(/\*(.*?)\*/g, '<em>$1</em>')
+            .replace(/`([^`]+)`/g, '<code>$1</code>')
+            .replace(/\n/g, '<br>');
+    }
+</script>
+{% endblock %}
