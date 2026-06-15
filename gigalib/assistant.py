@@ -1,5 +1,7 @@
 import os
 import json
+import time
+
 from google import genai
 from google.genai import types
 from gigalib.models import Game
@@ -99,8 +101,6 @@ def ask_assistant(user_message, games, history=None):
             contents.append(types.Content(role=role, parts=[types.Part(text=msg["content"])]))
 
     contents.append(types.Content(role="user", parts=[types.Part(text=user_message)]))
-
-    import time
 
     models_to_try = ["gemini-3.5-flash", "gemini-2.0-flash"]
     last_error = None

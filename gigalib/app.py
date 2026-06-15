@@ -1,4 +1,7 @@
 import os
+import sqlite3
+
+from apscheduler.schedulers.background import BackgroundScheduler
 from flask import Flask
 from flask_sqlalchemy import SQLAlchemy
 from dotenv import load_dotenv
@@ -48,7 +51,6 @@ def create_app():
     with app.app_context():
         db.create_all()
         # Auto-migrate: add missing columns
-        import sqlite3
         db_path = app.config["SQLALCHEMY_DATABASE_URI"].replace("sqlite:///", "")
         try:
             conn = sqlite3.connect(app.instance_path + "/" + db_path if not os.path.isabs(db_path) else db_path)
@@ -62,8 +64,6 @@ def create_app():
 
     # Start hourly scheduler (only in the main process, not the reloader)
     if os.environ.get("WERKZEUG_RUN_MAIN") == "true" or not app.debug:
-        from apscheduler.schedulers.background import BackgroundScheduler
-
         scheduler = BackgroundScheduler(daemon=True)
         scheduler.app = app
         scheduler.add_job(_sync_and_enrich_job, "interval", hours=1, id="sync_enrich")

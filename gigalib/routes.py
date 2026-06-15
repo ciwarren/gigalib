@@ -1,3 +1,5 @@
+import os
+
 from flask import Blueprint, render_template, jsonify, request
 from gigalib.models import Game
 from gigalib.platforms import sync_all_platforms
@@ -88,8 +90,6 @@ def get_game(game_id):
 @main_bp.route("/games/<int:game_id>/launch", methods=["POST"])
 def launch_game(game_id):
     """Launch a game via its platform protocol."""
-    import os as _os
-
     game = Game.query.get_or_404(game_id)
     launch_url = None
 
@@ -108,7 +108,7 @@ def launch_game(game_id):
         return jsonify({"error": "No launch URL available for this game"}), 400
 
     try:
-        _os.startfile(launch_url)
+        os.startfile(launch_url)
         return jsonify({"status": "launched", "url": launch_url})
     except Exception as e:
         return jsonify({"error": str(e)}), 500

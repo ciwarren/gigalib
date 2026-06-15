@@ -1,8 +1,12 @@
+import json
 import os
 import re
 import hashlib
+import winreg
+
 import requests
 import yaml
+from Crypto.Cipher import AES
 from pathlib import Path
 from gigalib.models import Game
 from gigalib import db
@@ -232,9 +236,6 @@ def _decrypt_ea_library():
         return []
 
     try:
-        from Crypto.Cipher import AES
-        import json
-
         # Static key (EA updated format - no machine hash for IS)
         key_input = "allUsersGenericIdISl)%ge7fomILhfj*Qfi+,"
         key = hashlib.sha3_256(key_input.encode("ascii")).digest()
@@ -294,7 +295,6 @@ def sync_ea_local():
         content_ids = _get_ea_content_ids()
 
         # Build a set of actually-installed games by checking registry Install Dir exists
-        import winreg
         verified_installed = set()
         for reg_path in [r"SOFTWARE\WOW6432Node\EA Games", r"SOFTWARE\EA Games"]:
             try:
