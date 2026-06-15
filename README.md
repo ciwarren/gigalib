@@ -2,6 +2,8 @@
 
 A self-hosted Python web app that aggregates your game libraries from **Steam**, **EA Desktop**, **Ubisoft Connect**, and **Xbox/Game Pass** into a single unified dashboard — with AI-powered recommendations, IGDB ratings, and HowLongToBeat completion times.
 
+![GigaLib Main Page](main_page.png)
+
 ## Features
 
 - **Multi-platform sync** — Automatically detects installed games from Steam, EA Desktop (including encrypted IS file decryption), Ubisoft Connect, and Xbox/Game Pass

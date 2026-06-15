@@ -2,6 +2,7 @@
 name = "gigalib"
 version = "0.1.0"
 description = "Aggregate all your games with an AI-powered backlog assistant"
+license = "GPL-3.0-or-later"
 requires-python = ">=3.11"
 dependencies = [
     "apscheduler>=3.11.2",
