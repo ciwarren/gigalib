@@ -8,9 +8,9 @@ Usage (run as admin for service, or normal user for Task Scheduler):
     uv run python install_service.py status
 """
 
+import os
 import subprocess
 import sys
-import os
 
 TASK_NAME = "GigaLib"
 APP_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
@@ -40,11 +40,16 @@ def install():
     # Create task that runs at logon
     result = subprocess.run(
         [
-            "schtasks", "/create",
-            "/tn", TASK_NAME,
-            "/tr", serve_cmd,
-            "/sc", "onlogon",
-            "/rl", "limited",
+            "schtasks",
+            "/create",
+            "/tn",
+            TASK_NAME,
+            "/tr",
+            serve_cmd,
+            "/sc",
+            "onlogon",
+            "/rl",
+            "limited",
             "/f",
         ],
         capture_output=True,

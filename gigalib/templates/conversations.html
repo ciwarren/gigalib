@@ -1,0 +1,232 @@
+{% extends "base.html" %}
+
+{% block content %}
+<style>
+    .conversations-wrap {
+        display: grid;
+        grid-template-columns: 320px 1fr;
+        gap: 1.5rem;
+        min-height: calc(100vh - 120px);
+    }
+
+    @media (max-width: 1024px) {
+        .conversations-wrap {
+            grid-template-columns: 1fr;
+        }
+    }
+
+    .conversations-list,
+    .conversation-view {
+        background: var(--bg-secondary);
+        border: 1px solid var(--border);
+        border-radius: 22px;
+        overflow: hidden;
+    }
+
+    .panel-head {
+        padding: 1rem 1.25rem;
+        border-bottom: 1px solid var(--border);
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        gap: 0.75rem;
+    }
+
+    .panel-title {
+        font-size: 0.95rem;
+    }
+
+    .panel-subtitle {
+        font-size: 0.75rem;
+        color: var(--text-secondary);
+        margin-top: 0.25rem;
+    }
+
+    .panel-action {
+        padding: 0.35rem 0.7rem;
+        font-size: 0.75rem;
+    }
+
+    .conversation-items {
+        max-height: calc(100vh - 220px);
+        overflow-y: auto;
+    }
+
+    .conversation-item {
+        width: 100%;
+        text-align: left;
+        padding: 0.9rem 1.1rem;
+        border: 0;
+        border-bottom: 1px solid rgba(148, 163, 184, 0.12);
+        background: transparent;
+        color: var(--text-primary);
+        cursor: pointer;
+    }
+
+    .conversation-item:hover,
+    .conversation-item.active {
+        background: rgba(83, 247, 125, 0.10);
+    }
+
+    .conversation-item .title {
+        font-size: 0.9rem;
+        font-weight: 600;
+        margin-bottom: 0.35rem;
+    }
+
+    .conversation-item .meta {
+        font-size: 0.75rem;
+        color: var(--text-secondary);
+        display: flex;
+        justify-content: space-between;
+        gap: 1rem;
+    }
+
+    .conversation-preview {
+        font-size: 0.75rem;
+        color: var(--text-secondary);
+        margin-top: 0.35rem;
+        white-space: nowrap;
+        overflow: hidden;
+        text-overflow: ellipsis;
+    }
+
+    .conversation-messages {
+        padding: 1rem;
+        min-height: 420px;
+        max-height: calc(100vh - 220px);
+        overflow-y: auto;
+        display: flex;
+        flex-direction: column;
+        gap: 0.8rem;
+    }
+
+    .empty-history {
+        padding: 2rem;
+        color: var(--text-secondary);
+    }
+</style>
+
+<div class="container">
+    <div class="conversations-wrap">
+        <div class="conversations-list surface">
+            <div class="panel-head">
+                <h3 class="section-title panel-title">Saved Chats</h3>
+                <button class="btn btn-secondary panel-action" onclick="refreshConversations()">Refresh</button>
+            </div>
+            <div class="conversation-items" id="conversationItems">
+                <div class="empty-history">Loading conversations...</div>
+            </div>
+        </div>
+
+        <div class="conversation-view surface">
+            <div class="panel-head">
+                <div>
+                    <h3 id="selectedConversationTitle" class="section-title panel-title">Select a conversation</h3>
+                    <div id="selectedConversationMeta" class="panel-subtitle">Messages will appear here.</div>
+                </div>
+            </div>
+            <div class="conversation-messages" id="conversationMessages">
+                <div class="empty-history">Pick a conversation on the left to view its messages.</div>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+    let selectedConversationId = '';
+
+    function formatTimestamp(value) {
+        if (!value) return 'unknown time';
+        try {
+            return new Date(value).toLocaleString();
+        } catch (e) {
+            return value;
+        }
+    }
+
+    function renderMessage(role, content) {
+        const wrapper = document.createElement('div');
+        wrapper.className = role === 'user' ? 'message message-user' : 'message message-ai';
+        if (role === 'user') {
+            wrapper.textContent = content;
+        } else {
+            wrapper.innerHTML = content
+                .replace(/\*\*(.*?)\*\*/g, '<strong>$1</strong>')
+                .replace(/\*(.*?)\*/g, '<em>$1</em>')
+                .replace(/`([^`]+)`/g, '<code>$1</code>')
+                .replace(/\n/g, '<br>');
+        }
+        return wrapper;
+    }
+
+    async function refreshConversations() {
+        const list = document.getElementById('conversationItems');
+        list.innerHTML = '<div class="empty-history">Loading conversations...</div>';
+
+        try {
+            const resp = await fetch('/api/conversations');
+            const items = await resp.json();
+
+            if (!items.length) {
+                list.innerHTML = '<div class="empty-history">No saved conversations yet.</div>';
+                document.getElementById('conversationMessages').innerHTML = '<div class="empty-history">Start chatting from the library page and your conversations will appear here.</div>';
+                return;
+            }
+
+            list.innerHTML = '';
+            items.forEach(item => {
+                const button = document.createElement('button');
+                button.className = 'conversation-item' + (item.id === selectedConversationId ? ' active' : '');
+                button.dataset.conversationId = item.id;
+                button.innerHTML = `
+                    <div class="title">${item.title}</div>
+                    <div class="meta">
+                        <span>${item.message_count} messages</span>
+                        <span>${formatTimestamp(item.updated_at)}</span>
+                    </div>
+                    <div class="conversation-preview">${item.last_message || ''}</div>
+                `;
+                button.onclick = () => loadConversation(item.id);
+                list.appendChild(button);
+            });
+
+            if (!selectedConversationId) {
+                loadConversation(items[0].id);
+            }
+        } catch (e) {
+            list.innerHTML = '<div class="empty-history">Failed to load conversations.</div>';
+        }
+    }
+
+    async function loadConversation(conversationId) {
+        selectedConversationId = conversationId;
+
+        try {
+            const resp = await fetch(`/api/conversations/${conversationId}`);
+            if (!resp.ok) throw new Error('Not found');
+            const data = await resp.json();
+
+            document.getElementById('selectedConversationTitle').textContent = data.conversation.title;
+            document.getElementById('selectedConversationMeta').textContent = `${data.conversation.message_count} messages • Updated ${formatTimestamp(data.conversation.updated_at)}`;
+
+            const messages = document.getElementById('conversationMessages');
+            messages.innerHTML = '';
+            data.messages.forEach(msg => messages.appendChild(renderMessage(msg.role, msg.content)));
+            messages.scrollTop = messages.scrollHeight;
+
+            document.querySelectorAll('.conversation-item').forEach(item => {
+                item.classList.toggle('active', item.dataset.conversationId === conversationId);
+            });
+        } catch (e) {
+            document.getElementById('selectedConversationTitle').textContent = 'Conversation not found';
+            document.getElementById('selectedConversationMeta').textContent = '';
+            document.getElementById('conversationMessages').innerHTML = '<div class="empty-history">This conversation could not be loaded.</div>';
+        }
+    }
+
+    refreshConversations();
+</script>
+{% endblock %}

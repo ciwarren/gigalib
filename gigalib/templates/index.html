@@ -2,19 +2,44 @@
 
 {% block content %}
 <div class="container">
+    <div class="stat-grid">
+        <div class="stat-card">
+            <div class="label">Total games</div>
+            <div class="value">{{ stats.total_games }}</div>
+            <div class="sub">Everything in one place.</div>
+        </div>
+        <div class="stat-card">
+            <div class="label">Installed</div>
+            <div class="value">{{ stats.installed_games }}</div>
+            <div class="sub">Ready to launch now.</div>
+        </div>
+        <div class="stat-card">
+            <div class="label">Unplayed</div>
+            <div class="value">{{ stats.unplayed_games }}</div>
+            <div class="sub">Fresh picks waiting.</div>
+        </div>
+        <div class="stat-card">
+            <div class="label">Playtime</div>
+            <div class="value">{{ stats.total_playtime_hours }}h</div>
+            <div class="sub">Collected across the library.</div>
+        </div>
+    </div>
+
     <div class="layout">
         <!-- Game Library -->
-        <div class="library-section">
+        <div class="library-section surface">
             <div class="library-header">
-                <h2>Library ({{ games|length }} games)</h2>
+                <div>
+                    <h2>Library ({{ stats.total_games }} games)</h2>
+                </div>
                 <div class="filters">
-                    <button class="filter-btn active" onclick="filterGames('all')">All</button>
+                    <button class="filter-btn active" onclick="filterGames('all', this)">All</button>
                     {% for platform in platforms %}
-                    <button class="filter-btn" onclick="filterGames('{{ platform }}')">{{ platform|capitalize }}</button>
+                    <button class="filter-btn" onclick="filterGames('{{ platform }}', this)">{{ platform|capitalize }}</button>
                     {% endfor %}
                     <button class="filter-btn" id="installedToggle" onclick="toggleInstalled()">Installed</button>
                     <button class="filter-btn" id="multiplayerToggle" onclick="toggleMultiplayer()">Multiplayer</button>
-                    <select id="sortSelect" onchange="sortGames(this.value)" style="margin-left:auto;padding:0.4rem 0.6rem;border-radius:10px;border:1px solid var(--border);background:var(--bg-primary);color:var(--text-secondary);font-size:0.8rem;cursor:pointer;">
+                    <select id="sortSelect" class="control-select" onchange="sortGames(this.value)">
                         <option value="title-asc">A → Z</option>
                         <option value="title-desc">Z → A</option>
                         <option value="playtime-desc">Most Played</option>
@@ -23,9 +48,8 @@
                         <option value="platform-asc">Platform</option>
                     </select>
                 </div>
-                <div style="margin-top:0.75rem;">
-                    <input type="text" id="searchInput" placeholder="Search games..." oninput="searchGames(this.value)"
-                           style="width:100%;padding:0.5rem 1rem;border-radius:10px;border:1px solid var(--border);background:var(--bg-primary);color:var(--text-primary);font-size:0.85rem;outline:none;">
+                <div class="library-search">
+                    <input type="text" id="searchInput" class="control-input" placeholder="Search games..." oninput="searchGames(this.value)">
                 </div>
             </div>
 
@@ -33,13 +57,15 @@
             <div class="game-grid" id="gameGrid">
                 {% for game in games %}
                 <div class="game-card" data-platform="{{ game.platform }}" data-title="{{ game.title }}" data-playtime="{{ game.playtime_hours or 0 }}" data-rating="{{ game.critic_rating or 0 }}" data-installed="{{ game.is_installed|int }}" data-multiplayer="{{ game.is_multiplayer|int }}" onclick="showGameDetail({{ game.id }})">
+                    <div class="game-cover">
                     {% if game.image_url %}
                     <img src="{{ game.image_url }}" alt="{{ game.title }}" loading="lazy"
-                         onerror="this.style.display='none';this.nextElementSibling.style.display='flex';">
-                    <div class="no-img" style="display:none;">🎮</div>
+                        onerror="const fallback=this.nextElementSibling;this.remove();fallback.classList.remove('hidden-fallback');">
+                    <div class="no-img hidden-fallback">🎮</div>
                     {% else %}
                     <div class="no-img">🎮</div>
                     {% endif %}
+                    </div>
                     <div class="game-info">
                         <h3 title="{{ game.title }}">{{ game.title }}</h3>
                         <div class="game-meta">
@@ -61,22 +87,16 @@
         </div>
 
         <!-- AI Assistant -->
-        <div class="assistant-panel">
+        <div class="assistant-panel surface">
             <div class="assistant-header">
                 <div class="dot"></div>
-                <h3>GigaLib AI</h3>
-                <span style="font-size: 0.7rem; color: var(--text-secondary); margin-left: auto;">Gemini 3.5 Flash</span>
-            </div>
-            <div class="chat-messages" id="chatMessages">
-                <div class="message message-ai">
-                    Hey! I'm your backlog boss with full access to your library data. I can:<br><br>
-                    🎮 Recommend games based on mood/time<br>
-                    📊 Answer questions about your library<br>
-                    🔍 Filter, compare, and analyze your games<br>
-                    ⏱️ Track completion progress<br><br>
-                    Try: "How many unplayed games do I have?" or "Something intense for 30 minutes"
+                <div>
+                    <h3>GigaLib AI</h3>
+                    <div class="assistant-meta">Gemini 3.5 Flash</div>
                 </div>
+                <button class="btn btn-secondary btn-compact" onclick="startNewConversation()">New Chat</button>
             </div>
+            <div class="chat-messages" id="chatMessages"></div>
             <div class="chat-input-area">
                 <input type="text" id="chatInput" placeholder="e.g. Something chill for 2 hours..."
                        onkeypress="if(event.key==='Enter')sendMessage()">
@@ -89,17 +109,25 @@
 
 {% block scripts %}
 <script>
+    const defaultAssistantMessage = `
+        <div class="message message-ai">
+            Ask about your library, get a recommendation, or compare games.<br><br>
+            Try: "How many unplayed games do I have?" or "What should I play for 30 minutes?"
+        </div>`;
+
     // Sort games
     function sortGames(criteria) {
         const grid = document.getElementById('gameGrid');
+        if (!grid) return;
         const cards = Array.from(grid.querySelectorAll('.game-card'));
+        const titleSorter = new Intl.Collator(undefined, { numeric: true, sensitivity: 'base' });
         
         cards.sort((a, b) => {
             switch(criteria) {
                 case 'title-asc':
-                    return a.dataset.title.localeCompare(b.dataset.title);
+                    return titleSorter.compare(a.dataset.title, b.dataset.title);
                 case 'title-desc':
-                    return b.dataset.title.localeCompare(a.dataset.title);
+                    return titleSorter.compare(b.dataset.title, a.dataset.title);
                 case 'playtime-desc':
                     return parseFloat(b.dataset.playtime) - parseFloat(a.dataset.playtime);
                 case 'playtime-asc':
@@ -115,6 +143,8 @@
 
         cards.forEach(card => grid.appendChild(card));
     }
+
+    sortGames(document.getElementById('sortSelect')?.value || 'title-asc');
 
     // --- Filtering state ---
     let activeFilters = { platform: 'all', search: '', installed: false, multiplayer: false };
@@ -137,9 +167,9 @@
             : `Library (${visible_count} / ${total} games)`;
     }
 
-    function filterGames(platform) {
+    function filterGames(platform, button) {
         document.querySelectorAll('.filter-btn:not(#installedToggle):not(#multiplayerToggle)').forEach(b => b.classList.remove('active'));
-        event.target.classList.add('active');
+        button.classList.add('active');
         activeFilters.platform = platform;
         applyFilters();
     }
@@ -163,6 +193,58 @@
 
     // Conversation history
     let chatHistory = [];
+    let conversationId = localStorage.getItem('gigalibConversationId') || '';
+
+    function renderChatMessage(role, content) {
+        const chatMessages = document.getElementById('chatMessages');
+        const div = document.createElement('div');
+        div.className = role === 'user' ? 'message message-user' : 'message message-ai';
+        if (role === 'user') {
+            div.textContent = content;
+        } else {
+            div.innerHTML = formatResponse(content);
+        }
+        chatMessages.appendChild(div);
+    }
+
+    async function loadConversation(conversationIdToLoad) {
+        if (!conversationIdToLoad) return;
+
+        try {
+            const resp = await fetch(`/api/conversations/${conversationIdToLoad}`);
+            if (!resp.ok) return;
+            const data = await resp.json();
+            const chatMessages = document.getElementById('chatMessages');
+            chatMessages.innerHTML = '';
+            chatHistory = [];
+
+            data.messages.forEach(msg => {
+                chatHistory.push({ role: msg.role, content: msg.content });
+                renderChatMessage(msg.role, msg.content);
+            });
+
+            chatMessages.scrollTop = chatMessages.scrollHeight;
+        } catch (e) {
+            console.warn('Failed to load conversation history', e);
+        }
+    }
+
+    function startNewConversation() {
+        conversationId = '';
+        localStorage.removeItem('gigalibConversationId');
+        chatHistory = [];
+        renderDefaultAssistantMessage();
+    }
+
+    function renderDefaultAssistantMessage() {
+        document.getElementById('chatMessages').innerHTML = defaultAssistantMessage;
+    }
+
+    if (conversationId) {
+        loadConversation(conversationId);
+    } else {
+        renderDefaultAssistantMessage();
+    }
 
     // AI Chat
     async function sendMessage() {
@@ -195,7 +277,7 @@
             const resp = await fetch('/assistant', {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ message, history: chatHistory.slice(0, -1) })
+                body: JSON.stringify({ message, history: chatHistory.slice(0, -1), conversation_id: conversationId || null })
             });
             const data = await resp.json();
 
@@ -203,6 +285,10 @@
 
             // Add assistant response to history
             chatHistory.push({ role: 'assistant', content: data.response });
+            if (data.conversation_id) {
+                conversationId = data.conversation_id;
+                localStorage.setItem('gigalibConversationId', conversationId);
+            }
         } catch(e) {
             typingDiv.innerHTML = 'Sorry, something went wrong. Try again!';
             chatHistory.pop(); // remove the failed user message from history

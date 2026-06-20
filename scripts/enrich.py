@@ -7,9 +7,10 @@ Usage:
 """
 
 import sys
+
 from gigalib import create_app, db
-from gigalib.models import Game
 from gigalib.enricher import enrich_game
+from gigalib.models import Game
 
 
 def main():

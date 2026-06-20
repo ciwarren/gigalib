@@ -1,0 +1,54 @@
+{
+  "name": "GigaLib",
+  "short_name": "GigaLib",
+  "description": "Local-first game library curator with AI recommendations and enrichment",
+  "start_url": "/",
+  "display": "standalone",
+  "background_color": "#081018",
+  "theme_color": "#53f77d",
+  "orientation": "portrait-primary",
+  "scope": "/",
+  "icons": [
+    {
+      "src": "/static/logo-transparent-192.png",
+      "sizes": "192x192",
+      "type": "image/png",
+      "purpose": "any"
+    },
+    {
+      "src": "/static/logo-transparent-512.png",
+      "sizes": "512x512",
+      "type": "image/png",
+      "purpose": "any maskable"
+    }
+  ],
+  "categories": ["games", "productivity"],
+  "shortcuts": [
+    {
+      "name": "New Chat",
+      "short_name": "Chat",
+      "description": "Start a new game recommendation chat",
+      "url": "/?mode=chat",
+      "icons": [
+        {
+          "src": "data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 96 96'><rect fill='%23081018' width='96' height='96'/><circle cx='48' cy='48' r='35' fill='%2353f77d' opacity='0.2'/><text x='48' y='56' font-size='36' font-weight='bold' text-anchor='middle' fill='%2353f77d' font-family='monospace'>💬</text></svg>",
+          "sizes": "96x96",
+          "type": "image/svg+xml"
+        }
+      ]
+    },
+    {
+      "name": "View Library",
+      "short_name": "Library",
+      "description": "Browse your game library",
+      "url": "/?mode=library",
+      "icons": [
+        {
+          "src": "data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 96 96'><rect fill='%23081018' width='96' height='96'/><circle cx='48' cy='48' r='35' fill='%234ec9ff' opacity='0.2'/><text x='48' y='56' font-size='36' font-weight='bold' text-anchor='middle' fill='%234ec9ff' font-family='monospace'>📚</text></svg>",
+          "sizes": "96x96",
+          "type": "image/svg+xml"
+        }
+      ]
+    }
+  ]
+}

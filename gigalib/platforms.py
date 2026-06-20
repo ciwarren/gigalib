@@ -1,15 +1,16 @@
+import hashlib
 import json
 import os
 import re
-import hashlib
 import winreg
+from pathlib import Path
 
 import requests
 import yaml
 from Crypto.Cipher import AES
-from pathlib import Path
-from gigalib.models import Game
+
 from gigalib import db
+from gigalib.models import Game
 
 
 def _load_platform_config():
@@ -74,6 +75,183 @@ def _get_ea_image_url(title):
     return _EA_IMAGES.get(title, "")
 
 
+def _hours_from_minutes(minutes):
+    if minutes is None:
+        return None
+    try:
+        return round(float(minutes) / 60.0, 1)
+    except (TypeError, ValueError):
+        return None
+
+
+def _xbox_title_id(item):
+    return str(
+        item.get("titleId")
+        or item.get("id")
+        or item.get("siglId")
+        or item.get("productId")
+        or ""
+    )
+
+
+def _xbox_title_name(item):
+    return (
+        item.get("name")
+        or item.get("title")
+        or item.get("ProductTitle")
+        or item.get("LocalizedProperties", [{}])[0].get("ProductTitle")
+        or "Unknown Xbox Game"
+    )
+
+
+def _xbox_image_url(item):
+    return (
+        item.get("displayImage")
+        or item.get("displayImageUrl")
+        or item.get("displayImageUri")
+        or item.get("imageUrl")
+        or item.get("thumbnailUrl")
+        or ""
+    )
+
+
+def _batch_items(items, size):
+    for start in range(0, len(items), size):
+        yield items[start : start + size]
+
+
+def _microsoft_store_image_url(product):
+    localized = (product.get("LocalizedProperties") or [{}])[0]
+    images = localized.get("Images") or []
+    preferred_purposes = (
+        "BoxArt",
+        "Poster",
+        "BrandedKeyArt",
+        "FeaturePromotionalSquareArt",
+        "SuperHeroArt",
+        "TitledHeroArt",
+    )
+
+    for purpose in preferred_purposes:
+        for image in images:
+            if image.get("ImagePurpose") == purpose and image.get("Uri"):
+                uri = image["Uri"]
+                return f"https:{uri}" if uri.startswith("//") else uri
+
+    for image in images:
+        if image.get("Uri"):
+            uri = image["Uri"]
+            return f"https:{uri}" if uri.startswith("//") else uri
+
+    return ""
+
+
+def _hydrate_xbox_catalog_items(items):
+    product_ids = [
+        _xbox_title_id(item)
+        for item in items
+        if _xbox_title_id(item) and not _xbox_title_name(item).startswith("Unknown")
+    ]
+    id_only_items = [
+        item
+        for item in items
+        if _xbox_title_id(item) and _xbox_title_name(item).startswith("Unknown")
+    ]
+    product_ids.extend(_xbox_title_id(item) for item in id_only_items)
+    product_ids = list(dict.fromkeys(product_ids))
+
+    hydrated_by_id = {}
+    for batch in _batch_items(product_ids, 50):
+        url = "https://displaycatalog.mp.microsoft.com/v7.0/products"
+        params = {
+            "bigIds": ",".join(batch),
+            "market": "US",
+            "languages": "en-us",
+        }
+        try:
+            resp = requests.get(url, params=params, timeout=30)
+            resp.raise_for_status()
+        except requests.RequestException:
+            continue
+
+        for product in resp.json().get("Products", []):
+            product_id = product.get("ProductId")
+            localized = (product.get("LocalizedProperties") or [{}])[0]
+            title = (
+                localized.get("ProductTitle")
+                or localized.get("ShortTitle")
+                or localized.get("SortTitle")
+            )
+            if not product_id or not title:
+                continue
+            hydrated_by_id[product_id] = {
+                "id": product_id,
+                "title": title,
+                "imageUrl": _microsoft_store_image_url(product),
+            }
+
+    hydrated_items = []
+    for item in items:
+        title_id = _xbox_title_id(item)
+        hydrated = hydrated_by_id.get(title_id)
+        if hydrated:
+            merged = dict(item)
+            merged.update({key: value for key, value in hydrated.items() if value})
+            hydrated_items.append(merged)
+        else:
+            hydrated_items.append(item)
+
+    return hydrated_items
+
+
+_XBOX_COLLECTION_TITLES = {
+    "all console games",
+}
+
+
+def _is_xbox_collection_title(title):
+    return (title or "").strip().lower() in _XBOX_COLLECTION_TITLES
+
+
+def _sync_xbox_game_record(
+    title_id,
+    title_name,
+    image_url="",
+    last_played="",
+    playtime_hours=None,
+    is_gamepass=False,
+):
+    if _is_xbox_collection_title(title_name):
+        return False
+
+    existing = Game.query.filter_by(platform="xbox", app_id=title_id).first()
+
+    if not existing:
+        db.session.add(
+            Game(
+                title=title_name,
+                platform="xbox",
+                app_id=title_id,
+                image_url=image_url,
+                last_played=last_played,
+                playtime_hours=playtime_hours,
+                is_gamepass=is_gamepass,
+            )
+        )
+        return True
+
+    if title_name and (existing.title == "Unknown Xbox Game" or not existing.title):
+        existing.title = title_name
+    if image_url and not existing.image_url:
+        existing.image_url = image_url
+    if last_played:
+        existing.last_played = last_played
+    if playtime_hours is not None:
+        existing.playtime_hours = playtime_hours
+    existing.is_gamepass = is_gamepass or bool(existing.is_gamepass)
+    return False
+
+
 def sync_all_platforms():
     """Sync games from all configured platforms."""
     results = {}
@@ -119,9 +297,7 @@ def sync_steam():
 
         for game in games:
             appid = str(game["appid"])
-            existing = Game.query.filter_by(
-                platform="steam", app_id=appid
-            ).first()
+            existing = Game.query.filter_by(platform="steam", app_id=appid).first()
 
             if not existing:
                 new_game = Game(
@@ -135,9 +311,7 @@ def sync_steam():
                 db.session.add(new_game)
                 added += 1
             else:
-                existing.playtime_hours = round(
-                    game.get("playtime_forever", 0) / 60, 1
-                )
+                existing.playtime_hours = round(game.get("playtime_forever", 0) / 60, 1)
                 existing.is_installed = appid in installed_appids
 
         db.session.commit()
@@ -152,44 +326,84 @@ def sync_xbox():
     api_key = os.getenv("XBOX_API_KEY")
 
     headers = {"X-Authorization": api_key}
-    url = "https://xbl.io/api/v2/player/titleHistory"
+    catalog_url = "https://api.xbl.io/v2/gamepass/all"
+    history_url = "https://api.xbl.io/v2/titles"
 
     try:
-        resp = requests.get(url, headers=headers, timeout=30)
-        resp.raise_for_status()
-        data = resp.json()
+        catalog_resp = requests.get(catalog_url, headers=headers, timeout=30)
+        catalog_resp.raise_for_status()
+        catalog_data = catalog_resp.json()
 
-        titles = data.get("content", {}).get("titles", data.get("titles", []))
+        history_resp = requests.get(history_url, headers=headers, timeout=30)
+        history_resp.raise_for_status()
+        history_data = history_resp.json()
+
+        catalog_titles = (
+            catalog_data.get("content", catalog_data.get("titles", [])) or []
+        )
+        history_titles = (
+            history_data.get("content", {}).get(
+                "titles", history_data.get("titles", [])
+            )
+            or []
+        )
+        catalog_titles = _hydrate_xbox_catalog_items(catalog_titles)
+
         added = 0
+        skipped_catalog = 0
+        matched_history = set()
 
-        for title in titles:
+        for item in catalog_titles:
+            title_id = _xbox_title_id(item)
+            if not title_id:
+                continue
+            title_name = _xbox_title_name(item)
+            if title_name == "Unknown Xbox Game":
+                skipped_catalog += 1
+                continue
+            image_url = _xbox_image_url(item)
+            if _sync_xbox_game_record(
+                title_id=title_id,
+                title_name=title_name,
+                image_url=image_url,
+                is_gamepass=True,
+            ):
+                added += 1
+
+        for title in history_titles:
             if title.get("type") != "Game":
                 continue
 
-            existing = Game.query.filter_by(
-                platform="xbox", app_id=str(title.get("titleId"))
-            ).first()
+            title_id = _xbox_title_id(title)
+            if not title_id:
+                continue
 
-            if not existing:
-                new_game = Game(
-                    title=title.get("name", "Unknown"),
-                    platform="xbox",
-                    app_id=str(title.get("titleId")),
-                    image_url=title.get("displayImage", ""),
-                    last_played=title.get("titleHistory", {}).get("lastTimePlayed", ""),
-                )
-                db.session.add(new_game)
+            matched_history.add(title_id)
+            last_played = title.get("titleHistory", {}).get("lastTimePlayed", "")
+            playtime_hours = _hours_from_minutes(
+                title.get("stats", {}).get("minutesPlayed")
+            )
+            image_url = _xbox_image_url(title)
+
+            if _sync_xbox_game_record(
+                title_id=title_id,
+                title_name=_xbox_title_name(title),
+                image_url=image_url,
+                last_played=last_played,
+                playtime_hours=playtime_hours,
+                is_gamepass=bool((title.get("gamePass") or {}).get("isGamePass")),
+            ):
                 added += 1
-            else:
-                # Update last_played on re-sync
-                ltp = title.get("titleHistory", {}).get("lastTimePlayed", "")
-                if ltp:
-                    existing.last_played = ltp
-                if title.get("displayImage") and not existing.image_url:
-                    existing.image_url = title.get("displayImage")
 
         db.session.commit()
-        return {"status": "ok", "total": len(titles), "added": added}
+        return {
+            "status": "ok",
+            "catalog_total": len(catalog_titles),
+            "catalog_skipped_unknown": skipped_catalog,
+            "history_total": len(history_titles),
+            "matched_history": len(matched_history),
+            "added": added,
+        }
 
     except requests.RequestException as e:
         return {"status": "error", "reason": str(e)}
@@ -275,12 +489,14 @@ def _decrypt_ea_library():
             title = re.sub(r"\bNfs\b", "NFS", title)
             title = re.sub(r"\bEa\b", "EA", title)
 
-            results.append({
-                "slug": slug,
-                "softwareId": sid,
-                "installed": installed,
-                "title": title,
-            })
+            results.append(
+                {
+                    "slug": slug,
+                    "softwareId": sid,
+                    "installed": installed,
+                    "title": title,
+                }
+            )
 
         return results
     except Exception:
@@ -378,9 +594,7 @@ def sync_ea_local():
                     existing.app_id = app_id
 
         # Add games from IS library that weren't found via local scanning
-        existing_app_ids = {
-            g.app_id for g in Game.query.filter_by(platform="ea").all()
-        }
+        existing_app_ids = {g.app_id for g in Game.query.filter_by(platform="ea").all()}
         existing_titles = {
             g.title.lower() for g in Game.query.filter_by(platform="ea").all()
         }

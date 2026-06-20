@@ -3,16 +3,18 @@ Enrichment layer: fetches metadata from IGDB and HowLongToBeat
 to give Gemini maximum context about each game.
 """
 
+import asyncio
 import os
 import re
-import asyncio
+
 import requests
 from howlongtobeatpy import HowLongToBeat
-from gigalib.models import Game
-from gigalib import db
 
+from gigalib import db
+from gigalib.models import Game
 
 # --- IGDB (via Twitch OAuth) ---
+
 
 def _get_igdb_token():
     """Exchange Twitch client credentials for an IGDB access token."""
@@ -43,29 +45,33 @@ def _query_igdb(client_id, token, title):
     }
 
     # Sanitize title for IGDB search (commas/semicolons break APICALYPSE syntax)
-    search_title = title.replace('"', '')
-    search_title = search_title.replace(';', '')
-    search_title = search_title.replace(',', '')
+    search_title = title.replace('"', "")
+    search_title = search_title.replace(";", "")
+    search_title = search_title.replace(",", "")
     # Remove trademark/copyright symbols
-    search_title = re.sub(r'[®™©]', '', search_title)
+    search_title = re.sub(r"[®™©]", "", search_title)
     # Replace underscores with spaces (e.g. Watch_Dogs)
-    search_title = search_title.replace('_', ' ')
+    search_title = search_title.replace("_", " ")
     # Remove platform suffixes
     search_title = re.sub(
-        r'\s*(Xbox Series X\s*\|\s*S|Xbox One|Windows Edition|PC Edition|'
-        r'\(PC\)|\(Game Preview\)|\(Alpha Testing\)|\(Obsolete\))\s*',
-        ' ', search_title, flags=re.IGNORECASE
+        r"\s*(Xbox Series X\s*\|\s*S|Xbox One|Windows Edition|PC Edition|"
+        r"\(PC\)|\(Game Preview\)|\(Alpha Testing\)|\(Obsolete\))\s*",
+        " ",
+        search_title,
+        flags=re.IGNORECASE,
     ).strip()
     # Remove "for Xbox Series X|S" patterns
-    search_title = re.sub(r'\s+for\s+Xbox.*$', '', search_title, flags=re.IGNORECASE).strip()
+    search_title = re.sub(
+        r"\s+for\s+Xbox.*$", "", search_title, flags=re.IGNORECASE
+    ).strip()
     # Remove trailing bare "Windows" (e.g. "Cooking Simulator Windows")
-    search_title = re.sub(r'\s+Windows$', '', search_title, flags=re.IGNORECASE).strip()
+    search_title = re.sub(r"\s+Windows$", "", search_title, flags=re.IGNORECASE).strip()
     # Collapse multiple spaces
-    search_title = re.sub(r'\s{2,}', ' ', search_title).strip()
+    search_title = re.sub(r"\s{2,}", " ", search_title).strip()
 
     # Search with higher limit to find exact match among results
     body = (
-        f'fields name, total_rating, genres.name, summary, cover.url, themes.name, game_modes.name;'
+        f"fields name, total_rating, genres.name, summary, cover.url, themes.name, game_modes.name;"
         f' search "{search_title}"; limit 10;'
     )
 
@@ -81,37 +87,60 @@ def _query_igdb(client_id, token, title):
     # If no results, try stripping edition/subtitle suffixes
     if not results:
         stripped = re.sub(
-            r'\s*[-:]\s*(Definitive|Anniversary|Complete|Game of the Year|GOTY|'
-            r'Ultimate|Gold|Legacy|Remastered|Enhanced|Deluxe|Premium|Standard|'
-            r'Classic|Limited.*Edition|.*Special Edition)\b.*$',
-            '', search_title, flags=re.IGNORECASE
+            r"\s*[-:]\s*(Definitive|Anniversary|Complete|Game of the Year|GOTY|"
+            r"Ultimate|Gold|Legacy|Remastered|Enhanced|Deluxe|Premium|Standard|"
+            r"Classic|Limited.*Edition|.*Special Edition)\b.*$",
+            "",
+            search_title,
+            flags=re.IGNORECASE,
         ).strip()
         # Try removing trailing "Legacy"/"Classic" without a separator
         if stripped == search_title:
-            stripped = re.sub(r'\s+(Legacy|Classic)$', '', search_title, flags=re.IGNORECASE).strip()
+            stripped = re.sub(
+                r"\s+(Legacy|Classic)$", "", search_title, flags=re.IGNORECASE
+            ).strip()
         # Try removing " - Multiplayer" / " - Single Player" suffixes
         if stripped == search_title:
-            stripped = re.sub(r'\s*-\s*(Multiplayer|Single Player|Staging Branch|'
-                             r'Public Testing|Test Server|Public Beta Client|'
-                             r'Experimental Server)\s*$', '', search_title, flags=re.IGNORECASE).strip()
+            stripped = re.sub(
+                r"\s*-\s*(Multiplayer|Single Player|Staging Branch|"
+                r"Public Testing|Test Server|Public Beta Client|"
+                r"Experimental Server)\s*$",
+                "",
+                search_title,
+                flags=re.IGNORECASE,
+            ).strip()
         # Try removing parenthetical platform info
         if stripped == search_title:
-            stripped = re.sub(r'\s*\([^)]*\)\s*$', '', search_title).strip()
+            stripped = re.sub(r"\s*\([^)]*\)\s*$", "", search_title).strip()
         # Try removing regional edition suffixes like "The ANZ Special Edition"
         if stripped == search_title:
-            stripped = re.sub(r'\s+The\s+\w+\s+(Special\s+)?Edition$', '', search_title, flags=re.IGNORECASE).strip()
+            stripped = re.sub(
+                r"\s+The\s+\w+\s+(Special\s+)?Edition$",
+                "",
+                search_title,
+                flags=re.IGNORECASE,
+            ).strip()
         # Try removing " UNLIMITED" or " COMPLETE" (all caps suffixes)
         if stripped == search_title:
-            stripped = re.sub(r'\s+(UNLIMITED|COMPLETE|COLLECTION)$', '', search_title).strip()
+            stripped = re.sub(
+                r"\s+(UNLIMITED|COMPLETE|COLLECTION)$", "", search_title
+            ).strip()
         # Try removing "Playtest" / "Open Beta" / "Demo" / "PTS" suffixes
         if stripped == search_title:
-            stripped = re.sub(r'\s+(Playtest|Open Beta|Demo|PTS|Beta|Launcher)$', '', search_title, flags=re.IGNORECASE).strip()
+            stripped = re.sub(
+                r"\s+(Playtest|Open Beta|Demo|PTS|Beta|Launcher)$",
+                "",
+                search_title,
+                flags=re.IGNORECASE,
+            ).strip()
         # Try removing "Limited XYZ Edition" (e.g. "Watch Dogs Limited Asia Edition")
         if stripped == search_title:
-            stripped = re.sub(r'\s+Limited\s+\w+\s+Edition$', '', search_title, flags=re.IGNORECASE).strip()
+            stripped = re.sub(
+                r"\s+Limited\s+\w+\s+Edition$", "", search_title, flags=re.IGNORECASE
+            ).strip()
         if stripped != search_title:
             body = (
-                f'fields name, total_rating, genres.name, summary, cover.url, themes.name, game_modes.name;'
+                f"fields name, total_rating, genres.name, summary, cover.url, themes.name, game_modes.name;"
                 f' search "{stripped}"; limit 10;'
             )
             resp = requests.post(
@@ -124,10 +153,14 @@ def _query_igdb(client_id, token, title):
                 results = resp.json()
 
     # If no exact match found in search results, try exact name query
-    exact_found = any(r.get("name", "").lower() == title.lower() for r in results) if results else False
+    exact_found = (
+        any(r.get("name", "").lower() == title.lower() for r in results)
+        if results
+        else False
+    )
     if not exact_found:
         body_exact = (
-            f'fields name, total_rating, genres.name, summary, cover.url, themes.name, game_modes.name;'
+            f"fields name, total_rating, genres.name, summary, cover.url, themes.name, game_modes.name;"
             f' where name = "{search_title}"; limit 5;'
         )
         resp2 = requests.post(
@@ -149,22 +182,29 @@ def _query_igdb(client_id, token, title):
     exact_matches = [r for r in results if r.get("name", "").lower() == title.lower()]
     if exact_matches:
         # Pick the one with summary and highest rating
-        exact_matches.sort(key=lambda r: (bool(r.get("summary")), r.get("total_rating") or 0), reverse=True)
+        exact_matches.sort(
+            key=lambda r: (bool(r.get("summary")), r.get("total_rating") or 0),
+            reverse=True,
+        )
         game = exact_matches[0]
     return {
-        "critic_rating": round(game.get("total_rating", 0), 1) if game.get("total_rating") else None,
+        "critic_rating": (
+            round(game.get("total_rating", 0), 1) if game.get("total_rating") else None
+        ),
         "genres": ", ".join(g["name"] for g in game.get("genres", [])),
         "description": game.get("summary", ""),
         "cover_url": game.get("cover", {}).get("url", ""),
         "themes": ", ".join(t["name"] for t in game.get("themes", [])),
         "is_multiplayer": any(
-            m.get("name", "").lower() in ("multiplayer", "co-operative", "split screen", "battle royale")
+            m.get("name", "").lower()
+            in ("multiplayer", "co-operative", "split screen", "battle royale")
             for m in game.get("game_modes", [])
         ),
     }
 
 
 # --- HowLongToBeat ---
+
 
 async def _query_hltb(title):
     """Query HowLongToBeat for completion times."""
@@ -193,6 +233,7 @@ def _get_hltb_data(title):
 
 # --- Rating Tier Assignment ---
 
+
 def _assign_tier(rating):
     """Assign a tier based on critic rating (OpenCritic-style)."""
     if rating is None:
@@ -209,12 +250,17 @@ def _assign_tier(rating):
 
 # --- Main Enrichment Function ---
 
+
 def enrich_game(game):
     """Enrich a single game with IGDB and HLTB data."""
     enriched = False
 
     # Skip if fully enriched
-    if game.critic_rating is not None and game.main_story_hours is not None and game.description:
+    if (
+        game.critic_rating is not None
+        and game.main_story_hours is not None
+        and game.description
+    ):
         return False
 
     # IGDB enrichment

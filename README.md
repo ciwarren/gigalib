@@ -1,5 +1,9 @@
 # GigaLib
 
+<p align="center">
+  <img src="gigalib/static/logo-transparent-192.png" alt="GigaLib logo" width="128" height="128">
+</p>
+
 A self-hosted Python web app that aggregates your game libraries from **Steam**, **EA Desktop**, **Ubisoft Connect**, and **Xbox/Game Pass** into a single unified dashboard — with AI-powered recommendations, IGDB ratings, and HowLongToBeat completion times.
 
 ![GigaLib Main Page](main_page.png)
@@ -9,6 +13,7 @@ A self-hosted Python web app that aggregates your game libraries from **Steam**,
 - **Multi-platform sync** — Automatically detects installed games from Steam, EA Desktop (including encrypted IS file decryption), Ubisoft Connect, and Xbox/Game Pass
 - **Game enrichment** — Fetches critic ratings, genres, descriptions, cover art (IGDB), and completion times (HowLongToBeat)
 - **AI Assistant** — Chat with Gemini about your backlog: get recommendations by mood, time available, or genre; ask library stats; compare games
+- **Conversation history** — Saves chats to the local SQLite database so you can browse previous convos later
 - **Launch games** — Start any game directly from the dashboard via platform-native URLs (steam://, origin2://, uplay://)
 - **Production-ready** — Runs as a waitress WSGI server or Windows service
 
@@ -93,6 +98,7 @@ uv run python scripts/serve.py --host 0.0.0.0 --port 8080
 2. **Enrich** — Click enrich to fetch ratings, genres, and completion times from IGDB/HLTB
 3. **Browse** — Filter by platform, genre, rating, or installed status
 4. **Ask the AI** — Use the assistant chat to get personalized recommendations
+5. **Review history** — Open the History page to revisit past assistant conversations
 
 ## Project Structure
 
@@ -147,4 +153,5 @@ Gigalib/
 - **"No games found after sync"** — Check `platforms.yaml` paths match your actual install directories
 - **"Enrichment returning 0"** — Verify your Twitch Client ID/Secret are correct (used for IGDB)
 - **"Assistant says rate limited"** — Gemini free tier caps at ~15 req/min; wait a moment and retry
+- **Conversation history missing** — Past chats are stored in `instance/gigalib.db`; open the History page from the top bar
 - **EA games missing** — EA Desktop must be installed; the app decrypts the IS file for the full library
