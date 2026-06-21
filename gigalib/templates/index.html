@@ -1,6 +1,329 @@
 {% extends "base.html" %}
 
 {% block content %}
+<style>
+    .companion-tabs {
+        display: flex;
+        gap: 0.35rem;
+        margin-left: auto;
+        align-self: flex-start;
+    }
+
+    .companion-title-stack {
+        display: grid;
+        gap: 0.28rem;
+        justify-items: start;
+        text-align: left;
+    }
+
+    .companion-title-stack #newChatBtn {
+        justify-self: start;
+        margin-left: 0;
+    }
+
+    .companion-tab {
+        padding: 0.35rem 0.65rem;
+        border-radius: 10px;
+        border: 1px solid rgba(83, 247, 125, 0.14);
+        background: rgba(12, 21, 32, 0.98);
+        color: var(--text-secondary);
+        cursor: pointer;
+        font-size: 0.72rem;
+    }
+
+    .companion-tab.active {
+        border-color: rgba(83, 247, 125, 0.32);
+        color: #04110a;
+        background: linear-gradient(180deg, #79ff9d, var(--accent));
+    }
+
+    .companion-view {
+        display: none;
+        min-height: 0;
+        flex: 1;
+    }
+
+    .companion-view.active {
+        display: flex;
+        flex-direction: column;
+    }
+
+    .social-rail-section {
+        border-top: 1px solid rgba(83, 247, 125, 0.12);
+        padding-top: 0.75rem;
+        margin-top: 0.75rem;
+    }
+
+    .social-rail-label {
+        display: block;
+        color: var(--text-secondary);
+        font-size: 0.72rem;
+        text-transform: uppercase;
+        letter-spacing: 0.1em;
+        margin-bottom: 0.4rem;
+    }
+
+    .social-rail-row {
+        display: flex;
+        gap: 0.45rem;
+        align-items: center;
+    }
+
+    .social-rail-row .control-input,
+    .social-rail-row .control-select {
+        min-width: 0;
+        margin-left: 0;
+    }
+
+    .social-mini-list {
+        display: grid;
+        gap: 0.45rem;
+        margin-top: 0.55rem;
+    }
+
+    .social-mini-item {
+        padding: 0.55rem;
+        border-radius: 10px;
+        border: 1px solid rgba(83, 247, 125, 0.10);
+        background: rgba(8, 15, 23, 0.72);
+        font-size: 0.78rem;
+        color: var(--text-secondary);
+    }
+
+    .social-mini-item strong {
+        color: var(--text-primary);
+        font-weight: 700;
+    }
+
+    .rail-friends-modal {
+        display: none;
+        position: fixed;
+        inset: 0;
+        z-index: 1000;
+        align-items: center;
+        justify-content: center;
+        padding: 1rem;
+        background: rgba(2, 8, 14, 0.58);
+        backdrop-filter: blur(8px);
+    }
+
+    .rail-friends-modal.active {
+        display: flex;
+    }
+
+    .rail-friends-dialog {
+        width: min(360px, calc(100vw - 2rem));
+        max-height: min(420px, calc(100vh - 2rem));
+        display: flex;
+        flex-direction: column;
+        border: 1px solid rgba(83, 247, 125, 0.18);
+        border-radius: 16px;
+        background: rgba(10, 18, 28, 0.98);
+        box-shadow: 0 24px 70px rgba(0, 0, 0, 0.45);
+        overflow: hidden;
+    }
+
+    .rail-friends-dialog-head {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        gap: 1rem;
+        padding: 0.85rem 0.95rem;
+        border-bottom: 1px solid rgba(83, 247, 125, 0.12);
+    }
+
+    .rail-friends-dialog-head strong {
+        color: var(--text-primary);
+        font-size: 0.88rem;
+    }
+
+    .rail-friends-close {
+        border: 0;
+        background: transparent;
+        color: var(--text-secondary);
+        cursor: pointer;
+        font-size: 1.2rem;
+        line-height: 1;
+    }
+
+    .rail-friends-list {
+        display: grid;
+        gap: 0.45rem;
+        overflow-y: auto;
+        padding: 0.75rem;
+    }
+
+    .rail-friend-row {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        gap: 0.75rem;
+        padding: 0.65rem;
+        border: 1px solid rgba(83, 247, 125, 0.10);
+        border-radius: 10px;
+        background: rgba(8, 15, 23, 0.78);
+    }
+
+    .rail-friend-handle {
+        color: var(--text-primary);
+        font-weight: 700;
+    }
+
+    .rail-friend-status {
+        color: var(--text-secondary);
+        font-size: 0.74rem;
+        white-space: nowrap;
+    }
+
+    .rail-friend-status.online {
+        color: var(--accent);
+    }
+
+    .social-topline {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        gap: 0.75rem;
+        font-size: 0.78rem;
+        color: var(--text-secondary);
+    }
+
+    .rail-online-kpi {
+        display: grid;
+        gap: 0.25rem;
+        position: relative;
+        margin-top: 0.75rem;
+        padding: 0.85rem;
+        border: 1px solid rgba(83, 247, 125, 0.13);
+        border-radius: 14px;
+        background: linear-gradient(180deg, rgba(17, 37, 31, 0.86), rgba(8, 15, 23, 0.78));
+        cursor: pointer;
+        text-align: left;
+        width: 100%;
+    }
+
+    .rail-online-kpi:hover {
+        border-color: rgba(83, 247, 125, 0.28);
+        transform: translateY(-1px);
+    }
+
+    .rail-online-kpi .more {
+        position: absolute;
+        top: 0.65rem;
+        right: 0.8rem;
+        color: var(--text-secondary);
+        font-size: 1rem;
+        letter-spacing: 0.08em;
+    }
+
+    .rail-online-kpi .label {
+        color: var(--text-secondary);
+        font-size: 0.7rem;
+        text-transform: uppercase;
+        letter-spacing: 0.1em;
+    }
+
+    .rail-online-kpi .value {
+        color: var(--accent-3);
+        font-family: 'Press Start 2P', monospace;
+        font-size: 1.25rem;
+        line-height: 1.4;
+    }
+
+    .rail-online-kpi .meta {
+        color: var(--text-secondary);
+        font-size: 0.76rem;
+    }
+
+    .social-collapse {
+        border-top: 1px solid rgba(83, 247, 125, 0.12);
+        margin-top: 0.75rem;
+        padding-top: 0.75rem;
+    }
+
+    .social-collapse summary {
+        cursor: pointer;
+        color: var(--text-primary);
+        font-size: 0.84rem;
+        font-weight: 700;
+        list-style: none;
+    }
+
+    .social-collapse summary::-webkit-details-marker {
+        display: none;
+    }
+
+    .social-collapse summary::after {
+        content: '+';
+        float: right;
+        color: var(--text-secondary);
+    }
+
+    .social-collapse[open] summary::after {
+        content: '-';
+    }
+
+    .party-list {
+        display: flex;
+        gap: 0.4rem;
+        flex-wrap: wrap;
+        margin-top: 0.55rem;
+    }
+
+    .party-chip {
+        display: inline-flex;
+        align-items: center;
+        gap: 0.35rem;
+        border: 1px solid rgba(83, 247, 125, 0.16);
+        background: rgba(8, 15, 23, 0.88);
+        border-radius: 10px;
+        padding: 0.35rem 0.5rem;
+        color: var(--text-primary);
+        font-size: 0.76rem;
+    }
+
+    .party-chip button {
+        border: 0;
+        background: transparent;
+        color: var(--text-secondary);
+        cursor: pointer;
+        font-size: 0.8rem;
+        line-height: 1;
+    }
+
+    .social-companion-body {
+        flex: 1;
+        overflow-y: auto;
+        padding: 1rem;
+        background: rgba(8, 15, 22, 0.98);
+    }
+
+    .message-companion-body {
+        flex: 1;
+        display: flex;
+        flex-direction: column;
+        gap: 0.65rem;
+        min-height: 0;
+        padding: 1rem;
+        background: rgba(8, 15, 22, 0.98);
+    }
+
+    .message-mini-thread {
+        flex: 1;
+        min-height: 180px;
+        overflow-y: auto;
+        display: grid;
+        align-content: start;
+        gap: 0.45rem;
+    }
+
+    .message-mini-item.outgoing {
+        margin-left: 1.5rem;
+        border-color: rgba(83, 247, 125, 0.24);
+        background: rgba(19, 45, 30, 0.78);
+    }
+</style>
+
 <div class="container">
     <div class="stat-grid">
         <div class="stat-card">
@@ -56,7 +379,7 @@
             {% if games %}
             <div class="game-grid" id="gameGrid">
                 {% for game in games %}
-                <div class="game-card" data-platform="{{ game.platform }}" data-title="{{ game.title }}" data-playtime="{{ game.playtime_hours or 0 }}" data-rating="{{ game.critic_rating or 0 }}" data-installed="{{ game.is_installed|int }}" data-multiplayer="{{ game.is_multiplayer|int }}" onclick="showGameDetail({{ game.id }})">
+                <div class="game-card" data-platform="{{ game.platform }}" data-title="{{ game.title }}" data-title-key="{{ canonical_title(game.title) }}" data-playtime="{{ game.playtime_hours or 0 }}" data-rating="{{ game.critic_rating or 0 }}" data-installed="{{ game.is_installed|int }}" data-multiplayer="{{ game.is_multiplayer|int }}" onclick="showGameDetail({{ game.id }})">
                     <div class="game-cover">
                     {% if game.image_url %}
                     <img src="{{ game.image_url }}" alt="{{ game.title }}" loading="lazy"
@@ -86,22 +409,119 @@
             {% endif %}
         </div>
 
-        <!-- AI Assistant -->
+        <!-- Companion Panel -->
         <div class="assistant-panel surface">
             <div class="assistant-header">
                 <div class="dot"></div>
-                <div>
-                    <h3>GigaLib AI</h3>
-                    <div class="assistant-meta">Gemini 3.5 Flash</div>
+                <div class="companion-title-stack">
+                    <h3>GigaLib</h3>
+                    <div class="assistant-meta" id="companionMeta">Gemini 3.5 Flash</div>
+                    <button class="btn btn-secondary btn-compact" id="newChatBtn" onclick="startNewConversation()">New Session</button>
                 </div>
-                <button class="btn btn-secondary btn-compact" onclick="startNewConversation()">New Chat</button>
+                <div class="companion-tabs">
+                    <button class="companion-tab active" id="aiTab" type="button" onclick="showCompanion('ai')">AI</button>
+                    <button class="companion-tab" id="socialTab" type="button" onclick="showCompanion('social')">Social</button>
+                    <button class="companion-tab" id="messagesTab" type="button" onclick="showCompanion('messages')">Chat<span class="nav-badge" id="messagesTabBadge">0</span></button>
+                </div>
             </div>
-            <div class="chat-messages" id="chatMessages"></div>
-            <div class="chat-input-area">
-                <input type="text" id="chatInput" placeholder="e.g. Something chill for 2 hours..."
-                       onkeypress="if(event.key==='Enter')sendMessage()">
-                <button onclick="sendMessage()">Send</button>
+            <div class="companion-view active" id="aiCompanionView">
+                <div class="chat-messages" id="chatMessages"></div>
+                <div class="chat-input-area">
+                    <input type="text" id="chatInput" placeholder="e.g. Something chill for 2 hours..."
+                           onkeypress="if(event.key==='Enter')sendMessage()">
+                    <button onclick="sendMessage()">Send</button>
+                </div>
             </div>
+            <div class="companion-view" id="socialCompanionView">
+                <div class="social-companion-body">
+                    <div class="social-topline">
+                        <span id="socialRailStatus">Loading...</span>
+                        <a class="btn btn-secondary btn-compact" href="/social">Open</a>
+                    </div>
+
+                    <button class="rail-online-kpi" type="button" onclick="openRailFriendsModal()" aria-label="Open current friends list">
+                        <span class="more">...</span>
+                        <span class="label">Friends online</span>
+                        <span class="value" id="railOnlineFriendCount">0</span>
+                        <span class="meta" id="railOnlineFriendMeta">Loading friends...</span>
+                    </button>
+
+                    <div class="social-rail-section" style="margin-top:0.6rem;">
+                        <label class="social-rail-label" for="friendLibraryFilter">Shared with</label>
+                        <select class="control-select" id="friendLibraryFilter" onchange="filterByFriendLibrary(this.value)" style="width:100%;">
+                            <option value="">Everyone</option>
+                        </select>
+                        <div class="social-rail-status" id="friendFilterStatus"></div>
+                    </div>
+
+                    <details class="social-collapse">
+                        <summary>Party mode</summary>
+                        <div style="margin-top:0.75rem;">
+                            <div class="social-rail-row">
+                                <select class="control-select" id="partyFriendSelect" style="width:100%;">
+                                    <option value="">Pick friend</option>
+                                </select>
+                                <button class="btn btn-secondary btn-compact" type="button" onclick="addPartyFriend()">Add</button>
+                            </div>
+                            <div class="party-list" id="partyList"></div>
+                            <div class="social-rail-row" style="margin-top:0.6rem;">
+                                <button class="btn btn-primary btn-compact" type="button" onclick="applyPartyFilter()">Filter</button>
+                                <button class="btn btn-secondary btn-compact" type="button" onclick="clearPartyFilter()">Clear</button>
+                            </div>
+                        </div>
+                    </details>
+
+                    <details class="social-collapse">
+                        <summary>Friends</summary>
+                        <div style="margin-top:0.75rem;">
+                            <label class="social-rail-label" for="friendSearchInput">Find people</label>
+                            <div class="social-rail-row">
+                                <input class="control-input" id="friendSearchInput" placeholder="jacson">
+                                <button class="btn btn-secondary btn-compact" type="button" onclick="searchSocialPeople()">Find</button>
+                            </div>
+                            <div class="social-mini-list" id="socialSearchResults"></div>
+
+                            <div class="social-rail-section">
+                                <div class="social-rail-label">Requests</div>
+                                <div class="social-mini-list" id="socialRequestList"></div>
+                            </div>
+                        </div>
+                    </details>
+                </div>
+            </div>
+            <div class="companion-view" id="messagesCompanionView">
+                <div class="message-companion-body">
+                    <div class="social-topline">
+                        <span>Chat</span>
+                        <a class="btn btn-secondary btn-compact" href="/social">Open</a>
+                    </div>
+                    <div class="social-rail-section" style="margin-top:0;">
+                        <label class="social-rail-label" for="railMessageFriendSelect">Message</label>
+                        <select class="control-select" id="railMessageFriendSelect" onchange="loadRailMessages()" style="width:100%;">
+                            <option value="">Pick friend</option>
+                        </select>
+                    </div>
+                    <div class="message-mini-thread" id="railMessageThread">
+                        <div class="social-mini-item">Pick a friend to start messaging.</div>
+                    </div>
+                    <div class="social-rail-row">
+                        <input class="control-input" id="railMessageInput" placeholder="Message..." onkeypress="if(event.key==='Enter')sendRailMessage()">
+                        <button class="btn btn-primary btn-compact" type="button" onclick="sendRailMessage()">Send</button>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<div class="rail-friends-modal" id="railFriendsModal" onclick="closeRailFriendsModal(event)">
+    <div class="rail-friends-dialog" role="dialog" aria-modal="true" aria-labelledby="railFriendsModalTitle">
+        <div class="rail-friends-dialog-head">
+            <strong id="railFriendsModalTitle">Current friends</strong>
+            <button class="rail-friends-close" type="button" onclick="closeRailFriendsModal()" aria-label="Close friends list">x</button>
+        </div>
+        <div class="rail-friends-list" id="railFriendsModalList">
+            <div class="social-mini-item">No friends loaded.</div>
         </div>
     </div>
 </div>
@@ -114,6 +534,25 @@
             Ask about your library, get a recommendation, or compare games.<br><br>
             Try: "How many unplayed games do I have?" or "What should I play for 30 minutes?"
         </div>`;
+
+    function showCompanion(view) {
+        const meta = {
+            ai: 'Gemini 3.5 Flash',
+            social: 'Friends and shared libraries',
+            messages: 'Friend chat'
+        };
+        document.getElementById('aiCompanionView').classList.toggle('active', view === 'ai');
+        document.getElementById('socialCompanionView').classList.toggle('active', view === 'social');
+        document.getElementById('messagesCompanionView').classList.toggle('active', view === 'messages');
+        document.getElementById('aiTab').classList.toggle('active', view === 'ai');
+        document.getElementById('socialTab').classList.toggle('active', view === 'social');
+        document.getElementById('messagesTab').classList.toggle('active', view === 'messages');
+        document.getElementById('newChatBtn').style.display = view === 'ai' ? '' : 'none';
+        document.getElementById('companionMeta').textContent = meta[view] || meta.ai;
+        if (view === 'messages') {
+            loadRailMessages();
+        }
+    }
 
     // Sort games
     function sortGames(criteria) {
@@ -147,7 +586,29 @@
     sortGames(document.getElementById('sortSelect')?.value || 'title-asc');
 
     // --- Filtering state ---
-    let activeFilters = { platform: 'all', search: '', installed: false, multiplayer: false };
+    let activeFilters = { platform: 'all', search: '', installed: false, multiplayer: false, friendTitles: null };
+    let socialFriends = [];
+    let partyFriendIds = [];
+
+    function openRailFriendsModal() {
+        renderRailFriendsModalList(socialFriends);
+        document.getElementById('railFriendsModal')?.classList.add('active');
+    }
+
+    function closeRailFriendsModal(event) {
+        if (event && event.target.id !== 'railFriendsModal') return;
+        document.getElementById('railFriendsModal')?.classList.remove('active');
+    }
+
+    function formatRailMessageFriendLabel(friend) {
+        const unread = typeof getUnreadMessageCountForFriend === 'function'
+            ? getUnreadMessageCountForFriend(friend.id)
+            : 0;
+        const status = friend.is_online ? 'Online' : 'Offline';
+        return unread > 0
+            ? `@${friend.handle} - ${status} - ${unread} new`
+            : `@${friend.handle} - ${status}`;
+    }
 
     function applyFilters() {
         let visible_count = 0;
@@ -158,6 +619,7 @@
             if (activeFilters.search && !card.dataset.title.toLowerCase().includes(activeFilters.search)) visible = false;
             if (activeFilters.installed && card.dataset.installed !== '1') visible = false;
             if (activeFilters.multiplayer && card.dataset.multiplayer !== '1') visible = false;
+            if (activeFilters.friendTitles && !activeFilters.friendTitles.has(card.dataset.titleKey)) visible = false;
             card.style.display = visible ? '' : 'none';
             if (visible) visible_count++;
         });
@@ -190,6 +652,310 @@
         document.getElementById('multiplayerToggle').classList.toggle('active', activeFilters.multiplayer);
         applyFilters();
     }
+
+    async function loadSocialRail() {
+        try {
+            const [overviewResp, friendsResp] = await Promise.all([
+                fetch('/api/social/overview'),
+                fetch('/api/social/friends'),
+            ]);
+            const overview = await overviewResp.json();
+            document.getElementById('socialRailStatus').textContent = overview.account
+                ? `@${overview.account.handle}`
+                : 'Not signed in';
+            if (typeof updateSocialSignInButton === 'function') updateSocialSignInButton(overview.account);
+
+            const friends = await friendsResp.json();
+            renderFriendFilter(Array.isArray(friends) ? friends : []);
+            await Promise.all([
+                loadSocialRequests(),
+                typeof refreshSocialNotifications === 'function'
+                    ? refreshSocialNotifications()
+                    : Promise.resolve(),
+            ]);
+        } catch (e) {
+            document.getElementById('socialRailStatus').textContent = 'Social unavailable';
+        }
+    }
+
+    function renderFriendFilter(friends) {
+        socialFriends = friends;
+        const select = document.getElementById('friendLibraryFilter');
+        const partySelect = document.getElementById('partyFriendSelect');
+        const messageSelect = document.getElementById('railMessageFriendSelect');
+        const currentMessageFriend = messageSelect.value;
+        select.innerHTML = '<option value="">Everyone</option>';
+        partySelect.innerHTML = '<option value="">Pick friend</option>';
+        messageSelect.innerHTML = '<option value="">Pick friend</option>';
+        friends.forEach(friend => {
+            const status = friend.is_online ? 'Online' : 'Offline';
+            const option = document.createElement('option');
+            option.value = friend.id;
+            option.textContent = `@${friend.handle} - ${status}`;
+            select.appendChild(option);
+
+            const partyOption = document.createElement('option');
+            partyOption.value = friend.id;
+            partyOption.textContent = `@${friend.handle} - ${status}`;
+            partySelect.appendChild(partyOption);
+
+            const messageOption = document.createElement('option');
+            messageOption.value = friend.id;
+            messageOption.textContent = formatRailMessageFriendLabel(friend);
+            messageSelect.appendChild(messageOption);
+        });
+        if (currentMessageFriend && friends.some(friend => String(friend.id) === currentMessageFriend)) {
+            messageSelect.value = currentMessageFriend;
+        }
+        const onlineCount = friends.filter(friend => friend.is_online).length;
+        const onlineKpi = document.getElementById('railOnlineFriendCount');
+        const onlineMeta = document.getElementById('railOnlineFriendMeta');
+        if (onlineKpi) onlineKpi.textContent = onlineCount;
+        if (onlineMeta) onlineMeta.textContent = friends.length ? `${friends.length} total friends - click to view` : 'No friends yet';
+        renderRailFriendsModalList(friends);
+        renderPartyList();
+    }
+
+    function renderRailFriendsModalList(friends) {
+        const list = document.getElementById('railFriendsModalList');
+        if (!list) return;
+        if (!friends.length) {
+            list.innerHTML = '<div class="social-mini-item">No friends yet.</div>';
+            return;
+        }
+        list.innerHTML = friends.map(friend => `
+            <div class="rail-friend-row">
+                <span class="rail-friend-handle">@${escapeHtml(friend.handle)}</span>
+                <span class="rail-friend-status ${friend.is_online ? 'online' : ''}">${friend.is_online ? 'Online now' : 'Offline'}</span>
+            </div>
+        `).join('');
+    }
+
+    async function loadRailMessages() {
+        const friendId = document.getElementById('railMessageFriendSelect').value;
+        const thread = document.getElementById('railMessageThread');
+        if (!friendId) {
+            thread.innerHTML = '<div class="social-mini-item">Pick a friend to start messaging.</div>';
+            return;
+        }
+        thread.innerHTML = '<div class="social-mini-item">Loading messages...</div>';
+        try {
+            const resp = await fetch(`/api/social/friends/${friendId}/messages`);
+            const data = await resp.json();
+            if (!resp.ok) throw new Error(data.error || 'Messages unavailable');
+            const messages = data.messages || [];
+            if (!messages.length) {
+                thread.innerHTML = '<div class="social-mini-item">No messages yet.</div>';
+                return;
+            }
+            if (typeof markSocialMessagesRead === 'function') {
+                markSocialMessagesRead(friendId, messages);
+            }
+            thread.innerHTML = messages.map(message => `
+                <div class="social-mini-item message-mini-item ${message.direction === 'outgoing' ? 'outgoing' : ''}">
+                    <strong>${message.direction === 'outgoing' ? 'You' : '@' + escapeHtml(message.sender.handle)}</strong><br>
+                    ${escapeHtml(message.body)}
+                </div>
+            `).join('');
+            thread.scrollTop = thread.scrollHeight;
+        } catch (e) {
+            thread.innerHTML = `<div class="social-mini-item">${escapeHtml(e.message)}</div>`;
+        }
+    }
+
+    async function sendRailMessage() {
+        const friendId = document.getElementById('railMessageFriendSelect').value;
+        const input = document.getElementById('railMessageInput');
+        const body = input.value.trim();
+        if (!friendId || !body) return;
+        const resp = await fetch(`/api/social/friends/${friendId}/messages`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ body })
+        });
+        const data = await resp.json();
+        if (!resp.ok) return alert(data.error || 'Could not send message');
+        input.value = '';
+        await loadRailMessages();
+        if (typeof refreshSocialNotifications === 'function') {
+            await refreshSocialNotifications();
+        }
+    }
+
+    window.addEventListener('gigalib-social-notifications', () => {
+        if (Array.isArray(socialFriends) && socialFriends.length) {
+            renderFriendFilter(socialFriends);
+        }
+    });
+
+    async function filterByFriendLibrary(friendId) {
+        const status = document.getElementById('friendFilterStatus');
+        if (!friendId) {
+            activeFilters.friendTitles = null;
+            status.textContent = '';
+            applyFilters();
+            return;
+        }
+
+        status.textContent = 'Loading friend library...';
+        try {
+            const resp = await fetch(`/api/social/friends/${friendId}/library`);
+            const data = await resp.json();
+            if (!resp.ok) throw new Error(data.error || 'Friend library unavailable');
+            activeFilters.friendTitles = new Set(data.canonical_titles || []);
+            status.textContent = '';
+            applyFilters();
+        } catch (e) {
+            activeFilters.friendTitles = null;
+            status.textContent = e.message;
+            applyFilters();
+        }
+    }
+
+    function addPartyFriend() {
+        const select = document.getElementById('partyFriendSelect');
+        const friendId = select.value;
+        if (!friendId || partyFriendIds.includes(friendId)) return;
+        partyFriendIds.push(friendId);
+        renderPartyList();
+    }
+
+    function removePartyFriend(friendId) {
+        partyFriendIds = partyFriendIds.filter(id => id !== friendId);
+        renderPartyList();
+    }
+
+    function renderPartyList() {
+        const list = document.getElementById('partyList');
+        if (!list) return;
+        if (!partyFriendIds.length) {
+            list.innerHTML = '';
+            return;
+        }
+        list.innerHTML = '';
+        partyFriendIds.forEach(friendId => {
+            const friend = socialFriends.find(item => String(item.id) === String(friendId));
+            const chip = document.createElement('span');
+            chip.className = 'party-chip';
+            chip.innerHTML = `@${friend?.handle || friendId} <button type="button" title="Remove">x</button>`;
+            chip.querySelector('button').onclick = () => removePartyFriend(friendId);
+            list.appendChild(chip);
+        });
+    }
+
+    async function applyPartyFilter() {
+        if (!partyFriendIds.length) {
+            return;
+        }
+
+        try {
+            const titleSets = [];
+            for (const friendId of partyFriendIds) {
+                const resp = await fetch(`/api/social/friends/${friendId}/library`);
+                const data = await resp.json();
+                if (!resp.ok) throw new Error(data.error || 'Friend library unavailable');
+                titleSets.push(new Set(data.canonical_titles || []));
+            }
+
+            const sharedTitles = titleSets.reduce((shared, titles) => {
+                return new Set([...shared].filter(title => titles.has(title)));
+            });
+
+            activeFilters.friendTitles = sharedTitles;
+            document.getElementById('friendLibraryFilter').value = '';
+            document.getElementById('friendFilterStatus').textContent = '';
+            applyFilters();
+        } catch (e) {
+            document.getElementById('friendFilterStatus').textContent = e.message;
+        }
+    }
+
+    function clearPartyFilter() {
+        partyFriendIds = [];
+        activeFilters.friendTitles = null;
+        document.getElementById('friendLibraryFilter').value = '';
+        document.getElementById('friendFilterStatus').textContent = '';
+        renderPartyList();
+        applyFilters();
+    }
+
+    async function searchSocialPeople() {
+        const results = document.getElementById('socialSearchResults');
+        const query = document.getElementById('friendSearchInput').value.trim();
+        if (!query) return;
+        results.innerHTML = '<div class="social-mini-item">Searching...</div>';
+        try {
+            const resp = await fetch(`/api/social/search?q=${encodeURIComponent(query)}`);
+            const people = await resp.json();
+            if (!resp.ok) throw new Error(people.error || 'Search failed');
+            if (!people.length) {
+                results.innerHTML = '<div class="social-mini-item">No matches.</div>';
+                return;
+            }
+            results.innerHTML = '';
+            people.forEach(person => {
+                const row = document.createElement('div');
+                row.className = 'social-mini-item';
+                row.innerHTML = `<strong>@${person.handle}</strong> <button class="btn btn-secondary btn-compact" type="button">Add</button>`;
+                row.querySelector('button').onclick = () => sendFriendRequest(person.handle);
+                results.appendChild(row);
+            });
+        } catch (e) {
+            results.innerHTML = `<div class="social-mini-item">${e.message}</div>`;
+        }
+    }
+
+    async function sendFriendRequest(handle) {
+        const resp = await fetch('/api/social/friend-requests', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ handle })
+        });
+        const data = await resp.json();
+        if (!resp.ok) return alert(data.error || 'Could not send request');
+        await loadSocialRequests();
+    }
+
+    async function loadSocialRequests() {
+        const list = document.getElementById('socialRequestList');
+        try {
+            const resp = await fetch('/api/social/friend-requests');
+            const requests = await resp.json();
+            if (typeof renderFriendRequestNotification === 'function') renderFriendRequestNotification(requests);
+            if (!Array.isArray(requests) || !requests.length) {
+                list.innerHTML = '<div class="social-mini-item">No requests.</div>';
+                return;
+            }
+            list.innerHTML = '';
+            requests.forEach(request => {
+                const row = document.createElement('div');
+                row.className = 'social-mini-item';
+                const handle = request.user?.handle || request.handle;
+                row.innerHTML = `<strong>@${handle}</strong> ${request.direction || ''}`;
+                if (request.direction === 'incoming') {
+                    const accept = document.createElement('button');
+                    accept.className = 'btn btn-secondary btn-compact';
+                    accept.type = 'button';
+                    accept.textContent = 'Accept';
+                    accept.onclick = () => respondFriendRequest(request.id, 'accept');
+                    row.appendChild(accept);
+                }
+                list.appendChild(row);
+            });
+        } catch (e) {
+            list.innerHTML = '<div class="social-mini-item">Requests unavailable.</div>';
+        }
+    }
+
+    async function respondFriendRequest(requestId, action) {
+        const resp = await fetch(`/api/social/friend-requests/${requestId}/${action}`, { method: 'POST' });
+        const data = await resp.json();
+        if (!resp.ok) return alert(data.error || 'Could not update request');
+        await loadSocialRail();
+        if (typeof checkFriendRequestNotifications === 'function') await checkFriendRequestNotifications();
+    }
+
+    loadSocialRail();
 
     // Conversation history
     let chatHistory = [];

@@ -1,5 +1,8 @@
 import os
+import secrets
 import sqlite3
+import threading
+from datetime import datetime
 
 from apscheduler.schedulers.background import BackgroundScheduler
 from dotenv import load_dotenv
@@ -10,18 +13,44 @@ load_dotenv()
 
 db = SQLAlchemy()
 scheduler = None
+_AUTO_SYNC_LOCK = threading.Lock()
+_AUTO_SYNC_STATE = {
+    "running": False,
+    "last_started_at": None,
+}
 
 
-def _sync_and_enrich_job():
-    """Background job: sync all platforms and enrich missing games."""
+def _run_sync_and_enrich(app):
     from gigalib.enricher import enrich_game
-    from gigalib.models import Game
+    from gigalib.models import Friend, Game
     from gigalib.platforms import sync_all_platforms
+    from gigalib.social import (SocialServiceError,
+                                fetch_remote_friend_library,
+                                list_remote_friends,
+                                sync_remote_social_snapshot,
+                                update_remote_presence)
 
-    app = scheduler.app
     with app.app_context():
         try:
             sync_all_platforms()
+            games = Game.query.order_by(Game.title.asc()).all()
+            try:
+                sync_remote_social_snapshot(games)
+                update_remote_presence()
+                list_remote_friends()
+                for friend in Friend.query.order_by(Friend.handle.asc()).all():
+                    try:
+                        fetch_remote_friend_library(friend.id)
+                    except SocialServiceError as exc:
+                        app.logger.info(
+                            "Friend library startup sync skipped for @%s: %s",
+                            friend.handle,
+                            exc.message,
+                        )
+                app.logger.info("Social sync completed")
+            except SocialServiceError as exc:
+                app.logger.info("Social sync skipped: %s", exc.message)
+
             unenriched = (
                 Game.query.filter((Game.description == None) | (Game.description == ""))
                 .limit(50)
@@ -33,9 +62,43 @@ def _sync_and_enrich_job():
                 except Exception:
                     continue
             db.session.commit()
-            app.logger.info("Scheduled sync+enrich completed")
+            app.logger.info("Scheduled sync+social+enrich completed")
         except Exception as e:
-            app.logger.warning(f"Scheduled sync+enrich failed: {e}")
+            app.logger.warning(f"Scheduled sync+social+enrich failed: {e}")
+
+
+def trigger_open_sync(app, min_interval_seconds=300):
+    if os.environ.get("GIGALIB_DISABLE_SCHEDULER") == "1":
+        return False
+
+    now = datetime.utcnow()
+    with _AUTO_SYNC_LOCK:
+        if _AUTO_SYNC_STATE["running"]:
+            return False
+        last_started_at = _AUTO_SYNC_STATE["last_started_at"]
+        if (
+            last_started_at
+            and (now - last_started_at).total_seconds() < min_interval_seconds
+        ):
+            return False
+        _AUTO_SYNC_STATE["running"] = True
+        _AUTO_SYNC_STATE["last_started_at"] = now
+
+    def _worker():
+        try:
+            _run_sync_and_enrich(app)
+        finally:
+            with _AUTO_SYNC_LOCK:
+                _AUTO_SYNC_STATE["running"] = False
+
+    threading.Thread(target=_worker, name="gigalib-open-sync", daemon=True).start()
+    return True
+
+
+def _sync_and_enrich_job():
+    """Background job: sync all platforms, social state, and enrich missing games."""
+    app = scheduler.app
+    _run_sync_and_enrich(app)
 
 
 def create_app():
@@ -44,7 +107,14 @@ def create_app():
         os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "instance"
     )
     app = Flask(__name__, instance_path=instance_path)
-    app.config["SECRET_KEY"] = os.getenv("SECRET_KEY", "dev-key")
+    secret_key = os.getenv("SECRET_KEY")
+    if not secret_key:
+        # Avoid a shared static fallback key; use ephemeral key when env is missing.
+        secret_key = secrets.token_urlsafe(32)
+        app.logger.warning(
+            "SECRET_KEY not set; using an ephemeral key for this process."
+        )
+    app.config["SECRET_KEY"] = secret_key
     app.config["SQLALCHEMY_DATABASE_URI"] = "sqlite:///gigalib.db"
 
     db.init_app(app)
@@ -111,11 +181,22 @@ def create_app():
             pass
 
     # Start hourly scheduler (only in the main process, not the reloader)
-    if os.environ.get("WERKZEUG_RUN_MAIN") == "true" or not app.debug:
+    if os.environ.get("GIGALIB_DISABLE_SCHEDULER") != "1" and (
+        os.environ.get("WERKZEUG_RUN_MAIN") == "true" or not app.debug
+    ):
         scheduler = BackgroundScheduler(daemon=True)
         scheduler.app = app
         scheduler.add_job(_sync_and_enrich_job, "interval", hours=1, id="sync_enrich")
+        scheduler.add_job(
+            _sync_and_enrich_job,
+            "date",
+            run_date=datetime.utcnow(),
+            id="startup_sync_enrich",
+            replace_existing=True,
+        )
         scheduler.start()
-        app.logger.info("Scheduler started: sync+enrich every hour")
+        app.logger.info(
+            "Scheduler started: startup sync plus sync+social+enrich every hour"
+        )
 
     return app

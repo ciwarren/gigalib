@@ -1,3 +1,4 @@
+import json
 import os
 import re
 import threading
@@ -9,8 +10,22 @@ from flask import Blueprint, current_app, jsonify, render_template, request
 from gigalib import db
 from gigalib.assistant import ask_assistant
 from gigalib.enricher import enrich_game
-from gigalib.models import Conversation, ConversationMessage, Game
+from gigalib.models import (Conversation, ConversationMessage, Friend,
+                            FriendRequest, Game, RemoteLibrarySnapshot)
 from gigalib.platforms import sync_all_platforms
+from gigalib.social import (SocialServiceError, accept_remote_friend_request,
+                            canonical_title, compare_remote_friends,
+                            compare_with_friend, compare_with_friends,
+                            decline_remote_friend_request,
+                            fetch_remote_friend_library, get_account_link,
+                            get_or_create_privacy_settings,
+                            list_remote_friend_requests, list_remote_friends,
+                            list_remote_messages, login_remote_account,
+                            register_remote_account, search_remote_users,
+                            send_remote_friend_request, send_remote_message,
+                            social_overview, sync_local_social_snapshot,
+                            sync_remote_social_snapshot,
+                            update_privacy_settings, update_remote_presence)
 
 main_bp = Blueprint("main", __name__)
 
@@ -165,11 +180,19 @@ def _deduped_game_records(games):
         if current is None or _dedupe_rank(game) < _dedupe_rank(current):
             preferred_by_title[key] = game
 
-    return sorted(preferred_by_title.values(), key=lambda game: (game.title or "").lower())
+    return sorted(
+        preferred_by_title.values(), key=lambda game: (game.title or "").lower()
+    )
 
 
 def _deduped_title_count(games):
-    return len({_title_key(game.title) for game in _visible_game_records(games) if _title_key(game.title)})
+    return len(
+        {
+            _title_key(game.title)
+            for game in _visible_game_records(games)
+            if _title_key(game.title)
+        }
+    )
 
 
 def _duplicate_title_count(games):
@@ -203,6 +226,126 @@ def _library_stats(games):
     }
 
 
+def _mentioned_handles(message):
+    return sorted(
+        {
+            match.lower()
+            for match in re.findall(r"@([a-zA-Z0-9_\-]{3,40})", message or "")
+        }
+    )
+
+
+def _friend_library_context_from_snapshot(friend, snapshot_payload, source):
+    snapshot = snapshot_payload.get("snapshot", snapshot_payload)
+    games = snapshot.get("games", []) if isinstance(snapshot, dict) else []
+    sorted_games = sorted(
+        games,
+        key=lambda item: (
+            not bool(item.get("is_installed")),
+            -(item.get("playtime_hours") or 0),
+            (item.get("display_title") or "").lower(),
+        ),
+    )
+    included_games = []
+    for item in sorted_games[:150]:
+        included_games.append(
+            {
+                "title": item.get("display_title") or item.get("canonical_title"),
+                "platforms": item.get("platforms") or [],
+                "is_installed": bool(item.get("is_installed")),
+                "is_multiplayer": bool(item.get("is_multiplayer")),
+                "playtime_hours": item.get("playtime_hours"),
+                "genre": item.get("genre"),
+                "tags": item.get("tags") or [],
+                "critic_rating": item.get("critic_rating"),
+                "rating_tier": item.get("rating_tier"),
+            }
+        )
+
+    return {
+        "handle": friend.handle,
+        "source": source,
+        "synced_at": snapshot_payload.get("synced_at")
+        or (
+            friend.last_library_sync_at.isoformat()
+            if friend.last_library_sync_at
+            else None
+        ),
+        "total_games": len(games),
+        "included_games": len(included_games),
+        "omitted_games": max(0, len(games) - len(included_games)),
+        "installed_games": sum(1 for item in games if item.get("is_installed")),
+        "multiplayer_games": sum(1 for item in games if item.get("is_multiplayer")),
+        "games": included_games,
+    }
+
+
+def _build_social_context_for_message(message):
+    handles = _mentioned_handles(message)
+    if not handles:
+        return None
+
+    context = {"mentioned_handles": handles, "friend_libraries": [], "unavailable": []}
+    for handle in handles:
+        friend = Friend.query.filter_by(handle=handle).first()
+        if not friend:
+            context["unavailable"].append(
+                {
+                    "handle": handle,
+                    "reason": "No accepted friend with this handle is cached locally",
+                }
+            )
+            continue
+
+        try:
+            payload = fetch_remote_friend_library(friend.id)
+            context["friend_libraries"].append(
+                _friend_library_context_from_snapshot(friend, payload, "remote")
+            )
+            continue
+        except SocialServiceError as exc:
+            cached = RemoteLibrarySnapshot.query.filter_by(
+                remote_user_id=friend.remote_user_id
+            ).first()
+            if not cached:
+                context["unavailable"].append({"handle": handle, "reason": exc.message})
+                continue
+
+            try:
+                snapshot = json.loads(cached.snapshot_json)
+            except ValueError:
+                context["unavailable"].append(
+                    {"handle": handle, "reason": "Cached friend library is unreadable"}
+                )
+                continue
+
+            context["friend_libraries"].append(
+                _friend_library_context_from_snapshot(
+                    friend,
+                    {
+                        "snapshot": snapshot,
+                        "synced_at": (
+                            cached.library_synced_at.isoformat()
+                            if cached.library_synced_at
+                            else None
+                        ),
+                    },
+                    "cached",
+                )
+            )
+
+    return context
+
+
+def _queue_app_open_sync():
+    from gigalib.app import trigger_open_sync
+
+    try:
+        trigger_open_sync(current_app._get_current_object())
+    except Exception as exc:
+        current_app.logger.info("App-open sync was not queued: %s", exc)
+
+
 @main_bp.route("/")
 def index():
     all_games = _game_records_query()
@@ -212,14 +355,26 @@ def index():
     )
     platform_list = [p[0] for p in platforms]
     stats = _library_stats(all_games)
+    _queue_app_open_sync()
     return render_template(
-        "index.html", games=games, platforms=platform_list, stats=stats
+        "index.html",
+        games=games,
+        platforms=platform_list,
+        stats=stats,
+        canonical_title=canonical_title,
     )
 
 
 @main_bp.route("/conversations")
 def conversations_page():
+    _queue_app_open_sync()
     return render_template("conversations.html")
+
+
+@main_bp.route("/social")
+def social_page():
+    _queue_app_open_sync()
+    return render_template("social.html")
 
 
 @main_bp.route("/api/conversations")
@@ -239,6 +394,224 @@ def get_conversation(conversation_id):
             "messages": _conversation_messages(conversation),
         }
     )
+
+
+@main_bp.route("/api/social/overview")
+def get_social_overview():
+    games = _deduped_game_records(_game_records_query())
+    return jsonify(social_overview(games))
+
+
+@main_bp.route("/api/social/account")
+def get_social_account():
+    account = get_account_link()
+    settings = get_or_create_privacy_settings()
+    return jsonify(
+        {
+            "account": account.to_dict() if account else None,
+            "privacy": settings.to_dict(),
+        }
+    )
+
+
+@main_bp.route("/api/social/register", methods=["POST"])
+def register_social_account():
+    data = request.get_json() or {}
+    handle = (data.get("handle") or "").strip().lstrip("@").lower()
+    password = data.get("password") or ""
+    service_url = (data.get("service_url") or "").strip() or None
+
+    if not handle:
+        return jsonify({"error": "Handle is required"}), 400
+    if len(password) < 8:
+        return jsonify({"error": "Password must be at least 8 characters"}), 400
+    if not re.match(r"^[a-zA-Z0-9_\-]{3,40}$", handle):
+        return (
+            jsonify(
+                {
+                    "error": "Handle must be 3-40 letters, numbers, underscores, or hyphens"
+                }
+            ),
+            400,
+        )
+
+    try:
+        account = register_remote_account(handle, password, service_url=service_url)
+        return (
+            jsonify(
+                {
+                    "account": account.to_dict(),
+                    "message": "Created your social account.",
+                }
+            ),
+            201,
+        )
+    except SocialServiceError as exc:
+        return jsonify({"error": exc.message}), exc.status_code
+
+
+@main_bp.route("/api/social/login", methods=["POST"])
+def login_social_account():
+    data = request.get_json() or {}
+    handle = (data.get("handle") or "").strip().lstrip("@").lower()
+    password = data.get("password") or ""
+    service_url = (data.get("service_url") or "").strip() or None
+
+    if not handle or not password:
+        return jsonify({"error": "Handle and password are required"}), 400
+
+    try:
+        account = login_remote_account(handle, password, service_url=service_url)
+        return jsonify(
+            {
+                "account": account.to_dict(),
+                "message": "Signed in to your social account.",
+            }
+        )
+    except SocialServiceError as exc:
+        return jsonify({"error": exc.message}), exc.status_code
+
+
+@main_bp.route("/api/social/logout", methods=["POST"])
+def logout_social_account():
+    account = get_account_link()
+    if account:
+        account.access_token = None
+        db.session.commit()
+    return jsonify({"ok": True})
+
+
+@main_bp.route("/api/social/privacy", methods=["PUT"])
+def update_social_privacy():
+    settings = update_privacy_settings(request.get_json() or {})
+    return jsonify(settings.to_dict())
+
+
+@main_bp.route("/api/social/sync", methods=["POST"])
+def sync_social_library():
+    games = _deduped_game_records(_game_records_query())
+    try:
+        return jsonify(sync_remote_social_snapshot(games))
+    except SocialServiceError as exc:
+        if exc.status_code == 400:
+            return jsonify({"error": exc.message}), exc.status_code
+        fallback = sync_local_social_snapshot(games)
+        fallback["warning"] = exc.message
+        return jsonify(fallback), 202
+
+
+@main_bp.route("/api/social/presence", methods=["POST"])
+@main_bp.route("/api/social/check-in", methods=["POST"])
+def update_social_presence():
+    try:
+        return jsonify(update_remote_presence())
+    except SocialServiceError as exc:
+        return jsonify({"error": exc.message}), exc.status_code
+
+
+@main_bp.route("/api/social/friends")
+def list_social_friends():
+    try:
+        return jsonify(list_remote_friends())
+    except SocialServiceError:
+        overview = social_overview(_deduped_game_records(_game_records_query()))
+        return jsonify(overview["friends"])
+
+
+@main_bp.route("/api/social/friends/<int:friend_id>/library")
+def get_social_friend_library(friend_id):
+    try:
+        return jsonify(fetch_remote_friend_library(friend_id))
+    except SocialServiceError as exc:
+        return jsonify({"error": exc.message}), exc.status_code
+
+
+@main_bp.route("/api/social/friends/<int:friend_id>/messages")
+def list_social_messages(friend_id):
+    try:
+        return jsonify(list_remote_messages(friend_id))
+    except SocialServiceError as exc:
+        return jsonify({"error": exc.message}), exc.status_code
+
+
+@main_bp.route("/api/social/friends/<int:friend_id>/messages", methods=["POST"])
+def send_social_message(friend_id):
+    data = request.get_json() or {}
+    body = data.get("body") or ""
+    try:
+        return jsonify(send_remote_message(friend_id, body))
+    except SocialServiceError as exc:
+        return jsonify({"error": exc.message}), exc.status_code
+
+
+@main_bp.route("/api/social/search")
+def search_social_users():
+    query = (request.args.get("q") or "").strip()
+    if not query:
+        return jsonify([])
+    try:
+        return jsonify(search_remote_users(query))
+    except SocialServiceError as exc:
+        return jsonify({"error": exc.message}), exc.status_code
+
+
+@main_bp.route("/api/social/friend-requests")
+def list_social_friend_requests():
+    try:
+        return jsonify(list_remote_friend_requests())
+    except SocialServiceError:
+        requests = FriendRequest.query.order_by(FriendRequest.created_at.desc()).all()
+        return jsonify([friend_request.to_dict() for friend_request in requests])
+
+
+@main_bp.route("/api/social/friend-requests", methods=["POST"])
+def create_social_friend_request():
+    data = request.get_json() or {}
+    handle = (data.get("handle") or "").strip().lstrip("@").lower()
+    if not handle:
+        return jsonify({"error": "Handle is required"}), 400
+    try:
+        return jsonify(send_remote_friend_request(handle))
+    except SocialServiceError as exc:
+        return jsonify({"error": exc.message}), exc.status_code
+
+
+@main_bp.route("/api/social/friend-requests/<int:request_id>/accept", methods=["POST"])
+def accept_social_friend_request(request_id):
+    try:
+        return jsonify(accept_remote_friend_request(request_id))
+    except SocialServiceError as exc:
+        return jsonify({"error": exc.message}), exc.status_code
+
+
+@main_bp.route("/api/social/friend-requests/<int:request_id>/decline", methods=["POST"])
+def decline_social_friend_request(request_id):
+    try:
+        return jsonify(decline_remote_friend_request(request_id))
+    except SocialServiceError as exc:
+        return jsonify({"error": exc.message}), exc.status_code
+
+
+@main_bp.route("/api/social/compare")
+def compare_social_friend():
+    friend_ids = request.args.getlist("friend_id", type=int)
+    if not friend_ids:
+        return jsonify({"error": "friend_id is required"}), 400
+
+    games = _deduped_game_records(_game_records_query())
+    try:
+        return jsonify(compare_remote_friends(friend_ids))
+    except SocialServiceError:
+        pass
+
+    if len(friend_ids) == 1:
+        comparison = compare_with_friend(friend_ids[0], games)
+    else:
+        comparison = compare_with_friends(friend_ids, games)
+
+    if comparison is None:
+        return jsonify({"error": "Friend not found"}), 404
+    return jsonify(comparison)
 
 
 @main_bp.route("/sync", methods=["POST"])
@@ -373,7 +746,13 @@ def assistant():
             {"role": msg.role, "content": msg.content} for msg in conversation.messages
         ][-8:]
 
-    response = ask_assistant(message, games, history=history)
+    social_context = _build_social_context_for_message(message)
+    response = ask_assistant(
+        message,
+        games,
+        history=history,
+        social_context=social_context,
+    )
 
     if not conversation:
         conversation = Conversation(

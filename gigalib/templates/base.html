@@ -374,11 +374,11 @@
         }
 
         .control-select {
-            margin-left: auto;
             padding: 0.4rem 0.6rem;
             color: var(--text-secondary);
             font-size: 0.8rem;
             cursor: pointer;
+            min-width: 130px;
         }
 
         .control-input {
@@ -400,6 +400,7 @@
             font-size: 0.8rem;
             transition: all 0.2s;
             backdrop-filter: blur(10px);
+            white-space: nowrap;
         }
 
         .filter-btn:hover, .filter-btn.active {
@@ -516,7 +517,7 @@
             padding: 1rem 1.15rem;
             border-bottom: 1px solid rgba(83, 247, 125, 0.12);
             display: flex;
-            align-items: center;
+            align-items: flex-start;
             gap: 0.5rem;
             background: linear-gradient(180deg, rgba(15, 30, 29, 0.96), rgba(11, 20, 31, 0.96));
         }
@@ -693,6 +694,29 @@
             margin-top: 1.5rem;
         }
 
+        .auth-mode-tabs {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 0.4rem;
+            margin-bottom: 1rem;
+        }
+
+        .auth-mode-tab {
+            padding: 0.5rem 0.75rem;
+            border-radius: 10px;
+            border: 1px solid rgba(83, 247, 125, 0.14);
+            background: rgba(12, 21, 32, 0.98);
+            color: var(--text-secondary);
+            cursor: pointer;
+            font-size: 0.82rem;
+        }
+
+        .auth-mode-tab.active {
+            border-color: rgba(83, 247, 125, 0.32);
+            color: #04110a;
+            background: linear-gradient(180deg, #79ff9d, var(--accent));
+        }
+
         .loading { opacity: 0.5; pointer-events: none; }
 
         a { color: inherit; }
@@ -703,6 +727,27 @@
 
         .nav-actions .btn-secondary:hover {
             background: rgba(18, 29, 43, 0.98);
+        }
+
+        .nav-badge {
+            display: none;
+            align-items: center;
+            justify-content: center;
+            min-width: 0.95rem;
+            height: 0.95rem;
+            margin-left: 0.3rem;
+            padding: 0 0.25rem;
+            border-radius: 999px;
+            background: rgba(83, 247, 125, 0.16);
+            color: var(--accent);
+            border: 1px solid rgba(83, 247, 125, 0.26);
+            font-size: 0.62rem;
+            font-weight: 700;
+            line-height: 1;
+        }
+
+        .nav-badge.visible {
+            display: inline-flex;
         }
 
         .game-detail-modal {
@@ -725,11 +770,16 @@
             <h1>GigaLib</h1>
         </a>
         <div class="nav-actions">
-            {% if request.path == '/conversations' %}
+            {% if request.path != '/' %}
             <a class="btn btn-secondary nav-link" href="/">Library</a>
-            {% else %}
+            {% endif %}
+            {% if request.path != '/social' %}
+            <a class="btn btn-secondary nav-link" href="/social">Social<span class="nav-badge" id="friendRequestBadge">0</span></a>
+            {% endif %}
+            {% if request.path != '/conversations' %}
             <a class="btn btn-secondary nav-link" href="/conversations">History</a>
             {% endif %}
+            <button class="btn btn-secondary" id="socialSignInBtn" onclick="openSocialSignInModal()">Sign In</button>
             <button class="btn btn-secondary install-btn" id="installBtn" onclick="installPWA()">📲 Install</button>
             <button class="btn btn-secondary" onclick="openAddModal()">+ Add Game</button>
             <button class="btn btn-secondary" id="enrichBtn" onclick="enrichLibrary()">🧠 Enrich All</button>
@@ -750,6 +800,37 @@
     </div>
 
     {% block content %}{% endblock %}
+
+    <!-- Add Game Modal -->
+    <div class="modal-overlay" id="socialSignInModal">
+        <div class="modal">
+            <h3 id="socialAuthTitle">Sign In</h3>
+            <div class="auth-mode-tabs">
+                <button class="auth-mode-tab active" id="socialLoginTab" type="button" onclick="setSocialAuthMode('login')">Sign In</button>
+                <button class="auth-mode-tab" id="socialCreateTab" type="button" onclick="setSocialAuthMode('register')">Create Account</button>
+            </div>
+            <div class="form-group">
+                <label>Handle</label>
+                <input type="text" id="socialSignInHandleInput" placeholder="charl" autocomplete="username">
+            </div>
+            <div class="form-group">
+                <label>Password</label>
+                <input type="password" id="socialSignInPasswordInput" placeholder="Password" autocomplete="current-password">
+            </div>
+            <div class="form-group" id="socialSignInConfirmGroup" style="display:none;">
+                <label>Verify Password</label>
+                <input type="password" id="socialSignInPasswordConfirmInput" placeholder="Re-enter password" autocomplete="new-password">
+            </div>
+            <div class="form-group">
+                <label>Social URL</label>
+                <input type="url" id="socialSignInUrlInput" placeholder="https://api.gigalib.uk">
+            </div>
+            <div class="modal-actions">
+                <button class="btn btn-secondary" onclick="closeSocialSignInModal()">Cancel</button>
+                <button class="btn btn-primary" id="socialSignInSubmitBtn" onclick="submitSocialSignIn()">Sign In</button>
+            </div>
+        </div>
+    </div>
 
     <!-- Add Game Modal -->
     <div class="modal-overlay" id="addModal">
@@ -792,6 +873,15 @@
     <script>
         let enrichStatusTimer = null;
         let deferredPrompt = null;
+        let socialAuthMode = 'login';
+        let socialNotificationPollTimer = null;
+        let socialNotificationPollInFlight = false;
+        const socialNotificationState = {
+            accountHandle: '',
+            requestCount: 0,
+            unreadByFriend: {},
+            unreadCount: 0,
+        };
 
         window.addEventListener('beforeinstallprompt', (e) => {
             e.preventDefault();
@@ -843,8 +933,314 @@
         function closeAddModal() {
             document.getElementById('addModal').classList.remove('active');
         }
+        function openSocialSignInModal() {
+            document.getElementById('socialSignInModal').classList.add('active');
+            setSocialAuthMode('login');
+            loadSocialSignInState();
+        }
+        function closeSocialSignInModal() {
+            document.getElementById('socialSignInModal').classList.remove('active');
+        }
         function closeGameDetail() {
             document.getElementById('gameDetailModal').classList.remove('active');
+        }
+
+        function setSocialAuthMode(mode) {
+            socialAuthMode = mode === 'register' ? 'register' : 'login';
+            const isRegister = socialAuthMode === 'register';
+            document.getElementById('socialAuthTitle').textContent = isRegister ? 'Create Account' : 'Sign In';
+            document.getElementById('socialSignInSubmitBtn').textContent = isRegister ? 'Create Account' : 'Sign In';
+            document.getElementById('socialSignInConfirmGroup').style.display = isRegister ? '' : 'none';
+            document.getElementById('socialLoginTab').classList.toggle('active', !isRegister);
+            document.getElementById('socialCreateTab').classList.toggle('active', isRegister);
+        }
+
+        async function loadSocialSignInState() {
+            try {
+                const resp = await fetch('/api/social/overview');
+                const data = await resp.json();
+                document.getElementById('socialSignInHandleInput').value = data.account?.handle || '';
+                document.getElementById('socialSignInUrlInput').value = data.account?.service_url || data.default_service_url || 'https://api.gigalib.uk';
+                updateSocialSignInButton(data.account);
+            } catch (e) {
+                document.getElementById('socialSignInUrlInput').value = 'https://api.gigalib.uk';
+            }
+        }
+
+        function updateSocialSignInButton(account) {
+            const btn = document.getElementById('socialSignInBtn');
+            if (!btn) return;
+            btn.textContent = account?.handle ? `@${account.handle}` : 'Sign In';
+        }
+
+        function setSocialNotificationAccount(account) {
+            socialNotificationState.accountHandle = account?.handle || '';
+        }
+
+        function socialReadStateStorageKey() {
+            return `gigalib-social-read:${socialNotificationState.accountHandle || 'guest'}`;
+        }
+
+        function loadSocialReadState() {
+            try {
+                return JSON.parse(localStorage.getItem(socialReadStateStorageKey()) || '{}');
+            } catch (e) {
+                return {};
+            }
+        }
+
+        function saveSocialReadState(state) {
+            try {
+                localStorage.setItem(socialReadStateStorageKey(), JSON.stringify(state));
+            } catch (e) {
+                console.warn('Failed to save social read state', e);
+            }
+        }
+
+        function socialTimestampValue(value) {
+            if (!value) return 0;
+            const parsed = Date.parse(value);
+            return Number.isFinite(parsed) ? parsed : 0;
+        }
+
+        function escapeHtml(value) {
+            return String(value ?? '')
+                .replace(/&/g, '&amp;')
+                .replace(/</g, '&lt;')
+                .replace(/>/g, '&gt;')
+                .replace(/"/g, '&quot;')
+                .replace(/'/g, '&#039;');
+        }
+
+        function safeImageUrl(value) {
+            const text = String(value || '').trim();
+            if (!text) return '';
+            if (/^https?:\/\//i.test(text)) return text;
+            if (/^\/(?!\/)/.test(text)) return text;
+            return '';
+        }
+
+        function formatSocialNotificationCount(count) {
+            return count > 99 ? '99+' : String(count);
+        }
+
+        function getUnreadMessageCountForFriend(friendId) {
+            return socialNotificationState.unreadByFriend[String(friendId)] || 0;
+        }
+
+        function getTotalUnreadMessageCount() {
+            return socialNotificationState.unreadCount || 0;
+        }
+
+        function updateSocialNotificationBadge() {
+            const badge = document.getElementById('friendRequestBadge');
+            const total = (socialNotificationState.requestCount || 0) + (socialNotificationState.unreadCount || 0);
+            if (badge) {
+                badge.textContent = formatSocialNotificationCount(total);
+                badge.classList.toggle('visible', total > 0);
+            }
+
+            const messageBadges = [
+                document.getElementById('messagesTabBadge'),
+                document.getElementById('socialMessagesTabBadge'),
+            ];
+            messageBadges.forEach(item => {
+                if (!item) return;
+                item.textContent = formatSocialNotificationCount(socialNotificationState.unreadCount || 0);
+                item.classList.toggle('visible', (socialNotificationState.unreadCount || 0) > 0);
+            });
+        }
+
+        function emitSocialNotificationUpdate() {
+            updateSocialNotificationBadge();
+            window.dispatchEvent(new CustomEvent('gigalib-social-notifications', {
+                detail: {
+                    requestCount: socialNotificationState.requestCount,
+                    unreadCount: socialNotificationState.unreadCount,
+                    unreadByFriend: { ...socialNotificationState.unreadByFriend },
+                }
+            }));
+        }
+
+        function countUnreadIncomingMessages(friendId, messages) {
+            const readState = loadSocialReadState();
+            const lastReadAt = socialTimestampValue(readState[String(friendId)]);
+            return (Array.isArray(messages) ? messages : []).filter(message => (
+                message.direction !== 'outgoing' && socialTimestampValue(message.created_at) > lastReadAt
+            )).length;
+        }
+
+        function markSocialMessagesRead(friendId, messages) {
+            const incoming = (Array.isArray(messages) ? messages : []).filter(message => message.direction !== 'outgoing');
+            const latestIncoming = incoming.reduce((latest, message) => (
+                socialTimestampValue(message.created_at) > socialTimestampValue(latest) ? message.created_at : latest
+            ), null);
+
+            if (!latestIncoming) {
+                return;
+            }
+
+            const readState = loadSocialReadState();
+            const key = String(friendId);
+            if (socialTimestampValue(latestIncoming) <= socialTimestampValue(readState[key])) {
+                return;
+            }
+            readState[key] = latestIncoming;
+            saveSocialReadState(readState);
+            delete socialNotificationState.unreadByFriend[key];
+            socialNotificationState.unreadCount = Object.values(socialNotificationState.unreadByFriend).reduce((sum, count) => sum + count, 0);
+            emitSocialNotificationUpdate();
+        }
+
+        async function initializeSocialAccountBadge() {
+            try {
+                const resp = await fetch('/api/social/account');
+                if (!resp.ok) return;
+                const data = await resp.json();
+                setSocialNotificationAccount(data.account);
+                updateSocialSignInButton(data.account);
+            } catch (e) {
+                console.warn('Failed to initialize social account badge', e);
+            }
+        }
+
+        function renderFriendRequestNotification(requests) {
+            const incoming = (Array.isArray(requests) ? requests : []).filter(request => request.direction === 'incoming');
+            socialNotificationState.requestCount = incoming.length;
+            emitSocialNotificationUpdate();
+        }
+
+        async function checkFriendRequestNotifications() {
+            try {
+                const resp = await fetch('/api/social/friend-requests');
+                if (!resp.ok) return;
+                renderFriendRequestNotification(await resp.json());
+            } catch (e) {
+                console.warn('Failed to check friend request notifications', e);
+            }
+        }
+
+        async function refreshUnreadMessageNotifications() {
+            try {
+                const accountResp = await fetch('/api/social/account');
+                if (!accountResp.ok) return;
+                const accountData = await accountResp.json();
+                setSocialNotificationAccount(accountData.account);
+                if (!accountData.account?.connected) {
+                    socialNotificationState.unreadByFriend = {};
+                    socialNotificationState.unreadCount = 0;
+                    emitSocialNotificationUpdate();
+                    return;
+                }
+
+                const friendsResp = await fetch('/api/social/friends');
+                if (!friendsResp.ok) return;
+                const friends = await friendsResp.json();
+                if (!Array.isArray(friends) || !friends.length) {
+                    socialNotificationState.unreadByFriend = {};
+                    socialNotificationState.unreadCount = 0;
+                    emitSocialNotificationUpdate();
+                    return;
+                }
+
+                const unreadByFriend = {};
+                const results = await Promise.allSettled(
+                    friends.map(async friend => {
+                        const resp = await fetch(`/api/social/friends/${friend.id}/messages`);
+                        if (!resp.ok) {
+                            throw new Error(`messages unavailable for @${friend.handle}`);
+                        }
+                        const data = await resp.json();
+                        const unreadCount = countUnreadIncomingMessages(friend.id, data.messages || []);
+                        return { friendId: String(friend.id), unreadCount, handle: friend.handle };
+                    })
+                );
+
+                results.forEach(result => {
+                    if (result.status === 'fulfilled') {
+                        if (result.value.unreadCount > 0) {
+                            unreadByFriend[result.value.friendId] = result.value.unreadCount;
+                        }
+                        return;
+                    }
+                    console.warn('Failed to check friend messages', result.reason);
+                });
+
+                socialNotificationState.unreadByFriend = unreadByFriend;
+                socialNotificationState.unreadCount = Object.values(unreadByFriend).reduce((sum, count) => sum + count, 0);
+                emitSocialNotificationUpdate();
+            } catch (e) {
+                console.warn('Failed to refresh unread messages', e);
+            }
+        }
+
+        async function refreshSocialNotifications() {
+            if (socialNotificationPollInFlight) {
+                return;
+            }
+            socialNotificationPollInFlight = true;
+            try {
+                await checkFriendRequestNotifications();
+                await refreshUnreadMessageNotifications();
+            } finally {
+                socialNotificationPollInFlight = false;
+            }
+        }
+
+        function startSocialNotificationPolling() {
+            if (socialNotificationPollTimer) {
+                return;
+            }
+            socialNotificationPollTimer = window.setInterval(() => {
+                if (document.hidden) {
+                    return;
+                }
+                refreshSocialNotifications();
+            }, 60000);
+        }
+
+        async function sendSocialPresence() {
+            try {
+                await fetch('/api/social/presence', { method: 'POST' });
+            } catch (e) {
+                console.warn('Failed to update social presence', e);
+            }
+        }
+
+        async function submitSocialSignIn() {
+            const submitBtn = document.getElementById('socialSignInSubmitBtn');
+            const handle = document.getElementById('socialSignInHandleInput').value.trim();
+            const password = document.getElementById('socialSignInPasswordInput').value;
+            const passwordConfirm = document.getElementById('socialSignInPasswordConfirmInput').value;
+            const serviceUrl = document.getElementById('socialSignInUrlInput').value.trim();
+            if (!handle) return alert('Handle is required');
+            if (password.length < 8) return alert('Password must be at least 8 characters');
+            if (socialAuthMode === 'register' && password !== passwordConfirm) return alert('Passwords do not match');
+
+            submitBtn.disabled = true;
+            submitBtn.textContent = socialAuthMode === 'register' ? 'Creating...' : 'Signing In...';
+            try {
+                const endpoint = socialAuthMode === 'register' ? '/api/social/register' : '/api/social/login';
+                const resp = await fetch(endpoint, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ handle, password, service_url: serviceUrl })
+                });
+                const data = await resp.json();
+                if (!resp.ok) return alert(data.error || 'Could not sign in');
+                document.getElementById('socialSignInPasswordInput').value = '';
+                document.getElementById('socialSignInPasswordConfirmInput').value = '';
+                closeSocialSignInModal();
+                updateSocialSignInButton(data.account);
+                if (typeof loadSocialRail === 'function') {
+                    await loadSocialRail();
+                }
+                await sendSocialPresence();
+                await refreshSocialNotifications();
+            } finally {
+                submitBtn.disabled = false;
+                submitBtn.textContent = socialAuthMode === 'register' ? 'Create Account' : 'Sign In';
+            }
         }
 
         async function showGameDetail(gameId) {
@@ -856,21 +1252,25 @@
             try {
                 const resp = await fetch(`/games/${gameId}`);
                 const game = await resp.json();
+                const safeTitle = escapeHtml(game.title || 'Unknown game');
+                const safePlatform = String(game.platform || 'unknown').toLowerCase().replace(/[^a-z0-9_-]/g, '');
+                const launchGameId = Number.isFinite(Number(game.id)) ? Number(game.id) : 0;
+                const imageUrl = safeImageUrl(game.image_url);
                 
                 let html = `<div style="display:flex;gap:1rem;margin-bottom:1rem;">`;
-                if (game.image_url) {
-                        html += `<img src="${game.image_url}" style="width:120px;height:70px;object-fit:contain;border-radius:8px;background:rgba(8,16,24,0.72);"
+                if (imageUrl) {
+                    html += `<img src="${escapeHtml(imageUrl)}" style="width:120px;height:70px;object-fit:contain;border-radius:8px;background:rgba(8,16,24,0.72);"
                              onerror="this.style.display='none'">`;
                 }
                 html += `<div>
-                    <h3 style="margin-bottom:0.3rem;">${game.title}</h3>
-                    <span class="platform-badge platform-${game.platform}">${game.platform}</span>
+                    <h3 style="margin-bottom:0.3rem;">${safeTitle}</h3>
+                    <span class="platform-badge platform-${safePlatform}">${escapeHtml(game.platform)}</span>
                     ${game.is_installed ? '<span style="color:#10b981;font-size:0.75rem;margin-left:0.5rem;">● Installed</span>' : ''}
-                    <button onclick="launchGame(${game.id})" style="margin-left:0.5rem;padding:0.2rem 0.6rem;font-size:0.75rem;background:var(--accent);color:#fff;border:none;border-radius:4px;cursor:pointer;">▶ Launch</button>
+                    ${launchGameId ? `<button onclick="launchGame(${launchGameId})" style="margin-left:0.5rem;padding:0.2rem 0.6rem;font-size:0.75rem;background:var(--accent);color:#fff;border:none;border-radius:4px;cursor:pointer;">▶ Launch</button>` : ''}
                 </div></div>`;
 
                 if (game.description) {
-                    html += `<p style="font-size:0.85rem;color:var(--text-secondary);margin-bottom:1rem;">${game.description}</p>`;
+                    html += `<p style="font-size:0.85rem;color:var(--text-secondary);margin-bottom:1rem;">${escapeHtml(game.description)}</p>`;
                 }
 
                 html += `<div style="display:grid;grid-template-columns:1fr 1fr;gap:0.75rem;margin-bottom:1rem;">`;
@@ -906,15 +1306,15 @@
                 html += `</div>`;
 
                 if (game.genre) {
-                    html += `<div style="margin-bottom:0.5rem;"><span style="font-size:0.75rem;color:var(--text-secondary);">Genre:</span> <span style="font-size:0.85rem;">${game.genre}</span></div>`;
+                    html += `<div style="margin-bottom:0.5rem;"><span style="font-size:0.75rem;color:var(--text-secondary);">Genre:</span> <span style="font-size:0.85rem;">${escapeHtml(game.genre)}</span></div>`;
                 }
                 if (game.tags) {
-                    html += `<div style="margin-bottom:0.5rem;"><span style="font-size:0.75rem;color:var(--text-secondary);">Tags:</span> <span style="font-size:0.85rem;">${game.tags}</span></div>`;
+                    html += `<div style="margin-bottom:0.5rem;"><span style="font-size:0.75rem;color:var(--text-secondary);">Tags:</span> <span style="font-size:0.85rem;">${escapeHtml(game.tags)}</span></div>`;
                 }
                 if (game.review) {
                     html += `<div style="margin-top:1rem;padding:0.75rem;background:var(--bg-primary);border-radius:8px;border-left:3px solid var(--accent);">
                         <div style="font-size:0.7rem;color:var(--text-secondary);margin-bottom:0.3rem;">Your Review</div>
-                        <div style="font-size:0.85rem;">${game.review}</div>
+                        <div style="font-size:0.85rem;">${escapeHtml(game.review)}</div>
                     </div>`;
                 }
 
@@ -1060,6 +1460,17 @@
         }
 
         initializeEnrichStatus();
+        initializeSocialAccountBadge();
+        sendSocialPresence();
+        window.setInterval(sendSocialPresence, 30000);
+        refreshSocialNotifications();
+        startSocialNotificationPolling();
+        window.addEventListener('focus', refreshSocialNotifications);
+        document.addEventListener('visibilitychange', () => {
+            if (!document.hidden) {
+                refreshSocialNotifications();
+            }
+        });
 
         async function addGame() {
             const title = document.getElementById('gameTitle').value.trim();

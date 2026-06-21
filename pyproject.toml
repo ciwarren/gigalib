@@ -20,6 +20,7 @@ dependencies = [
 
 [project.scripts]
 gigalib = "gigalib.serve:app"
+gigalib-social = "gigalib_social_service.app:main"
 
 [build-system]
 requires = ["hatchling"]

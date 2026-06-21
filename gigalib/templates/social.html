@@ -1,0 +1,740 @@
+{% extends "base.html" %}
+
+{% block content %}
+<style>
+    .social-layout {
+        display: grid;
+        grid-template-columns: 340px 1fr;
+        gap: 1.25rem;
+        align-items: start;
+    }
+
+    @media (max-width: 980px) {
+        .social-layout { grid-template-columns: 1fr; }
+    }
+
+    .social-panel {
+        padding: 1.15rem;
+    }
+
+    .social-stack {
+        display: grid;
+        gap: 1rem;
+    }
+
+    .social-head {
+        display: flex;
+        justify-content: space-between;
+        align-items: start;
+        gap: 1rem;
+        margin-bottom: 1rem;
+    }
+
+    .social-title {
+        font-family: 'Press Start 2P', monospace;
+        font-size: 0.9rem;
+        line-height: 1.5;
+    }
+
+    .social-subtle {
+        color: var(--text-secondary);
+        font-size: 0.78rem;
+        line-height: 1.45;
+        margin-top: 0.35rem;
+    }
+
+    .social-tabs {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 0.5rem;
+        margin-bottom: 1rem;
+    }
+
+    .social-tab {
+        padding: 0.45rem 0.7rem;
+        border-radius: 10px;
+        border: 1px solid rgba(83, 247, 125, 0.14);
+        background: rgba(12, 21, 32, 0.98);
+        color: var(--text-secondary);
+        cursor: pointer;
+        font-size: 0.8rem;
+    }
+
+    .social-tab.active {
+        border-color: rgba(83, 247, 125, 0.32);
+        color: #04110a;
+        background: linear-gradient(180deg, #79ff9d, var(--accent));
+    }
+
+    .social-section {
+        display: none;
+    }
+
+    .social-section.active {
+        display: block;
+    }
+
+    .social-form {
+        display: grid;
+        gap: 0.75rem;
+    }
+
+    .social-field label,
+    .privacy-row label {
+        display: block;
+        margin-bottom: 0.35rem;
+        color: var(--text-secondary);
+        font-size: 0.76rem;
+        text-transform: uppercase;
+        letter-spacing: 0.08em;
+    }
+
+    .social-field input,
+    .social-field select {
+        width: 100%;
+        padding: 0.7rem 0.8rem;
+        border-radius: 10px;
+        border: 1px solid rgba(83, 247, 125, 0.14);
+        background: rgba(8, 15, 23, 0.98);
+        color: var(--text-primary);
+        outline: none;
+    }
+
+    .social-actions {
+        display: flex;
+        gap: 0.6rem;
+        flex-wrap: wrap;
+        align-items: center;
+    }
+
+    .social-list {
+        display: grid;
+        gap: 0.65rem;
+    }
+
+    .social-item {
+        border: 1px solid rgba(83, 247, 125, 0.12);
+        border-radius: 12px;
+        background: rgba(11, 19, 29, 0.98);
+        padding: 0.85rem;
+    }
+
+    .social-item-title {
+        font-weight: 700;
+        margin-bottom: 0.3rem;
+    }
+
+    .social-item-meta {
+        color: var(--text-secondary);
+        font-size: 0.78rem;
+        line-height: 1.45;
+    }
+
+    .social-kpis {
+        display: grid;
+        grid-template-columns: repeat(3, minmax(0, 1fr));
+        gap: 0.65rem;
+        margin-bottom: 1rem;
+    }
+
+    @media (max-width: 720px) {
+        .social-kpis { grid-template-columns: 1fr; }
+    }
+
+    .social-kpi {
+        padding: 0.85rem;
+        border-radius: 12px;
+        border: 1px solid rgba(83, 247, 125, 0.12);
+        background: rgba(11, 19, 29, 0.98);
+    }
+
+    .social-kpi .label {
+        color: var(--text-secondary);
+        font-size: 0.72rem;
+        text-transform: uppercase;
+        letter-spacing: 0.1em;
+        margin-bottom: 0.35rem;
+    }
+
+    .social-kpi .value {
+        color: var(--accent-3);
+        font-family: 'Press Start 2P', monospace;
+        font-size: 0.9rem;
+        line-height: 1.5;
+    }
+
+    .privacy-grid {
+        display: grid;
+        grid-template-columns: repeat(2, minmax(0, 1fr));
+        gap: 0.8rem;
+    }
+
+    @media (max-width: 720px) {
+        .privacy-grid { grid-template-columns: 1fr; }
+    }
+
+    .privacy-row {
+        border: 1px solid rgba(83, 247, 125, 0.12);
+        border-radius: 12px;
+        padding: 0.85rem;
+        background: rgba(11, 19, 29, 0.98);
+    }
+
+    .privacy-row input[type="checkbox"] {
+        width: 18px;
+        height: 18px;
+        accent-color: var(--accent);
+    }
+
+    .status-pill {
+        display: inline-flex;
+        align-items: center;
+        padding: 0.3rem 0.55rem;
+        border-radius: 8px;
+        border: 1px solid rgba(83, 247, 125, 0.18);
+        color: var(--accent);
+        background: rgba(8, 17, 26, 0.96);
+        font-size: 0.74rem;
+    }
+
+    .empty-social {
+        color: var(--text-secondary);
+        padding: 1rem;
+        border: 1px dashed rgba(83, 247, 125, 0.18);
+        border-radius: 12px;
+        background: rgba(8, 15, 23, 0.68);
+    }
+
+    .presence-dot {
+        display: inline-block;
+        width: 0.5rem;
+        height: 0.5rem;
+        border-radius: 999px;
+        margin-right: 0.4rem;
+        background: rgba(169, 185, 176, 0.5);
+        vertical-align: middle;
+    }
+
+    .presence-dot.online {
+        background: var(--accent);
+        box-shadow: 0 0 10px rgba(83, 247, 125, 0.35);
+    }
+
+    .message-thread {
+        max-height: 360px;
+        overflow-y: auto;
+    }
+
+    .message-row {
+        max-width: 78%;
+    }
+
+    .message-row.outgoing {
+        margin-left: auto;
+        border-color: rgba(83, 247, 125, 0.24);
+        background: rgba(19, 45, 30, 0.78);
+    }
+</style>
+
+<div class="container">
+    <div class="social-layout">
+        <aside class="social-panel surface">
+            <div class="social-head">
+                <div>
+                    <h2 class="social-title">Social</h2>
+                    <div class="social-subtle" id="accountStatus">Loading account state...</div>
+                </div>
+                <span class="status-pill" id="connectionPill">Local</span>
+            </div>
+
+            <form class="social-form" onsubmit="saveAccount(event)">
+                <div class="auth-mode-tabs">
+                    <button class="auth-mode-tab active" id="socialPageLoginTab" type="button" onclick="setSocialPageAuthMode('login')">Sign In</button>
+                    <button class="auth-mode-tab" id="socialPageCreateTab" type="button" onclick="setSocialPageAuthMode('register')">Create Account</button>
+                </div>
+                <div class="social-field">
+                    <label for="handleInput">Handle</label>
+                    <input id="handleInput" name="handle" autocomplete="username" placeholder="charl">
+                </div>
+                <div class="social-field">
+                    <label for="passwordInput">Password</label>
+                    <input id="passwordInput" name="password" type="password" autocomplete="current-password" placeholder="Password">
+                </div>
+                <div class="social-field" id="passwordConfirmGroup" style="display:none;">
+                    <label for="passwordConfirmInput">Verify Password</label>
+                    <input id="passwordConfirmInput" name="password_confirm" type="password" autocomplete="new-password" placeholder="Re-enter password">
+                </div>
+                <div class="social-field">
+                    <label for="serviceUrlInput">Service URL</label>
+                    <input id="serviceUrlInput" name="service_url" placeholder="https://api.gigalib.uk">
+                </div>
+                <div class="social-actions">
+                    <button class="btn btn-primary" id="accountSubmitButton" type="submit">Sign In</button>
+                    <button class="btn btn-secondary" type="button" onclick="syncSocial()">Sync Social</button>
+                </div>
+            </form>
+        </aside>
+
+        <main class="social-panel surface">
+            <div class="social-kpis">
+                <div class="social-kpi">
+                    <div class="label">Shared snapshot</div>
+                    <div class="value" id="snapshotCount">0</div>
+                </div>
+                <div class="social-kpi">
+                    <div class="label">Friends online</div>
+                    <div class="value" id="onlineFriendCount">0</div>
+                </div>
+                <div class="social-kpi">
+                    <div class="label">Last sync</div>
+                    <div class="value" id="lastSync">None</div>
+                </div>
+            </div>
+
+            <div class="social-tabs" role="tablist">
+                <button class="social-tab active" type="button" onclick="showSocialTab('friends', this)">Friends</button>
+                <button class="social-tab" type="button" onclick="showSocialTab('messages', this)">Messages<span class="nav-badge" id="socialMessagesTabBadge">0</span></button>
+                <button class="social-tab" type="button" onclick="showSocialTab('requests', this)">Requests</button>
+                <button class="social-tab" type="button" onclick="showSocialTab('find', this)">Find People</button>
+                <button class="social-tab" type="button" onclick="showSocialTab('compare', this)">Compare</button>
+                <button class="social-tab" type="button" onclick="showSocialTab('privacy', this)">Privacy</button>
+            </div>
+
+            <section class="social-section active" id="tab-friends">
+                <div class="social-head">
+                    <div>
+                        <h3 class="social-title">Friends</h3>
+                        <div class="social-subtle">People you have added for shared library comparisons.</div>
+                    </div>
+                </div>
+                <div class="social-list" id="friendsList"></div>
+            </section>
+
+            <section class="social-section" id="tab-messages">
+                <div class="social-form">
+                    <div class="social-field">
+                        <label for="messageFriendSelect">Friend</label>
+                        <select id="messageFriendSelect" onchange="loadMessagesForSelectedFriend()"></select>
+                    </div>
+                    <div class="social-list message-thread" id="messageThread"></div>
+                    <div class="social-field">
+                        <label for="messageInput">Message</label>
+                        <input id="messageInput" placeholder="Send a message..." onkeypress="if(event.key==='Enter')sendMessageToFriend()">
+                    </div>
+                    <div class="social-actions">
+                        <button class="btn btn-primary" type="button" onclick="sendMessageToFriend()">Send</button>
+                    </div>
+                </div>
+            </section>
+
+            <section class="social-section" id="tab-requests">
+                <div class="social-head">
+                    <div>
+                        <h3 class="social-title">Requests</h3>
+                        <div class="social-subtle">Incoming and outgoing friend requests.</div>
+                    </div>
+                </div>
+                <div class="social-list" id="requestsList"></div>
+            </section>
+
+            <section class="social-section" id="tab-find">
+                <div class="social-form">
+                    <div class="social-field">
+                        <label for="findFriendStatusSelect">Current friends</label>
+                        <select id="findFriendStatusSelect"></select>
+                        <div class="social-subtle">Your existing friends and whether they are online.</div>
+                    </div>
+                    <div class="social-field">
+                        <label for="searchInput">Handle search</label>
+                        <input id="searchInput" placeholder="jacson">
+                    </div>
+                    <div class="social-actions">
+                        <button class="btn btn-primary" type="button" onclick="searchPeople()">Search</button>
+                    </div>
+                </div>
+                <div class="social-list" id="searchResults" style="margin-top:1rem;"></div>
+            </section>
+
+            <section class="social-section" id="tab-compare">
+                <div class="social-form">
+                    <div class="social-field">
+                        <label for="compareFriendSelect">Friends</label>
+                        <select id="compareFriendSelect" multiple size="6"></select>
+                    </div>
+                    <div class="social-actions">
+                        <button class="btn btn-primary" type="button" onclick="compareFriend()">Compare</button>
+                    </div>
+                </div>
+                <div class="social-list" id="compareResults" style="margin-top:1rem;"></div>
+            </section>
+
+            <section class="social-section" id="tab-privacy">
+                <form class="social-form" onsubmit="savePrivacy(event)">
+                    <div class="privacy-grid">
+                        <div class="privacy-row">
+                            <label for="sharePlaytime">Share playtime</label>
+                            <input id="sharePlaytime" type="checkbox">
+                        </div>
+                        <div class="privacy-row">
+                            <label for="shareLastPlayed">Share last played</label>
+                            <input id="shareLastPlayed" type="checkbox">
+                        </div>
+                        <div class="privacy-row">
+                            <label for="visibilitySelect">Visibility</label>
+                            <select id="visibilitySelect" class="control-select" style="width:100%;margin-left:0;">
+                                <option value="private">Private</option>
+                                <option value="friends">Friends</option>
+                                <option value="public">Public</option>
+                            </select>
+                        </div>
+                    </div>
+                    <div class="social-actions" style="margin-top:1rem;">
+                        <button class="btn btn-primary" type="submit">Save Privacy</button>
+                    </div>
+                </form>
+            </section>
+        </main>
+    </div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+    let socialState = null;
+    let socialPageAuthMode = 'login';
+
+    function shortDate(value) {
+        if (!value) return 'None';
+        try {
+            return new Date(value).toLocaleDateString();
+        } catch (e) {
+            return value;
+        }
+    }
+
+    function showSocialTab(name, button) {
+        document.querySelectorAll('.social-tab').forEach(tab => tab.classList.remove('active'));
+        document.querySelectorAll('.social-section').forEach(section => section.classList.remove('active'));
+        button.classList.add('active');
+        document.getElementById(`tab-${name}`).classList.add('active');
+        if (name === 'messages') {
+            loadMessagesForSelectedFriend();
+        }
+    }
+
+    function formatSocialFriendLabel(friend) {
+        const unread = typeof getUnreadMessageCountForFriend === 'function'
+            ? getUnreadMessageCountForFriend(friend.id)
+            : 0;
+        const status = friend.is_online ? 'Online' : 'Offline';
+        return unread > 0
+            ? `@${friend.handle} - ${status} - ${unread} new`
+            : `@${friend.handle} - ${status}`;
+    }
+
+    function setSocialPageAuthMode(mode) {
+        socialPageAuthMode = mode === 'register' ? 'register' : 'login';
+        const isRegister = socialPageAuthMode === 'register';
+        document.getElementById('passwordConfirmGroup').style.display = isRegister ? '' : 'none';
+        document.getElementById('accountSubmitButton').textContent = isRegister ? 'Create Account' : 'Sign In';
+        document.getElementById('socialPageLoginTab').classList.toggle('active', !isRegister);
+        document.getElementById('socialPageCreateTab').classList.toggle('active', isRegister);
+    }
+
+    function renderOverview(data) {
+        socialState = data;
+        const account = data.account;
+        const privacy = data.privacy || {};
+        const friends = data.friends || [];
+        const snapshot = data.snapshot_preview || {};
+
+        document.getElementById('accountStatus').textContent = account
+            ? `@${account.handle}`
+            : 'Not signed in';
+        document.getElementById('connectionPill').textContent = data.central_configured ? 'Connected' : 'Local';
+        document.getElementById('snapshotCount').textContent = snapshot.game_count || 0;
+        document.getElementById('onlineFriendCount').textContent = friends.filter(friend => friend.is_online).length;
+        document.getElementById('lastSync').textContent = account && account.last_sync_at ? shortDate(account.last_sync_at) : 'None';
+
+        document.getElementById('handleInput').value = account?.handle || '';
+        document.getElementById('serviceUrlInput').value = account?.service_url || data.default_service_url || 'https://api.gigalib.uk';
+        document.getElementById('sharePlaytime').checked = !!privacy.share_playtime;
+        document.getElementById('shareLastPlayed').checked = !!privacy.share_last_played;
+        document.getElementById('visibilitySelect').value = privacy.visibility || 'friends';
+
+        renderFriends(friends);
+        renderCompareSelect(friends);
+        renderMessageSelect(friends);
+        renderFindFriendStatusSelect(friends);
+    }
+
+    function renderFriends(friends) {
+        const list = document.getElementById('friendsList');
+        if (!friends.length) {
+            list.innerHTML = '<div class="empty-social">No friends yet.</div>';
+            return;
+        }
+        list.innerHTML = friends.map(friend => `
+            <div class="social-item">
+                <div class="social-item-title"><span class="presence-dot ${friend.is_online ? 'online' : ''}"></span>@${escapeHtml(friend.handle)}</div>
+                <div class="social-item-meta">${friend.is_online ? 'Online now' : 'Offline'} · Library shared: ${escapeHtml(shortDate(friend.last_library_sync_at))}${typeof getUnreadMessageCountForFriend === 'function' && getUnreadMessageCountForFriend(friend.id) > 0 ? ` · ${getUnreadMessageCountForFriend(friend.id)} unread` : ''}</div>
+            </div>
+        `).join('');
+    }
+
+    function renderCompareSelect(friends) {
+        const select = document.getElementById('compareFriendSelect');
+        if (!friends.length) {
+            select.innerHTML = '<option value="">No friends available</option>';
+            return;
+        }
+        select.innerHTML = friends.map(friend => `<option value="${friend.id}">@${escapeHtml(friend.handle)} - ${friend.is_online ? 'Online' : 'Offline'}</option>`).join('');
+    }
+
+    function renderFindFriendStatusSelect(friends) {
+        const select = document.getElementById('findFriendStatusSelect');
+        if (!select) return;
+        if (!friends.length) {
+            select.innerHTML = '<option value="">No current friends</option>';
+            return;
+        }
+        select.innerHTML = friends.map(friend => `<option value="${friend.id}">@${escapeHtml(friend.handle)} - ${friend.is_online ? 'Online now' : 'Offline'}</option>`).join('');
+    }
+
+    function renderMessageSelect(friends) {
+        const select = document.getElementById('messageFriendSelect');
+        if (!friends.length) {
+            select.innerHTML = '<option value="">No friends available</option>';
+            document.getElementById('messageThread').innerHTML = '<div class="empty-social">Add a friend to send messages.</div>';
+            return;
+        }
+        const current = select.value;
+        select.innerHTML = friends.map(friend => `<option value="${friend.id}">${escapeHtml(formatSocialFriendLabel(friend))}</option>`).join('');
+        if (current && friends.some(friend => String(friend.id) === current)) {
+            select.value = current;
+        }
+    }
+
+    async function loadMessagesForSelectedFriend() {
+        const select = document.getElementById('messageFriendSelect');
+        const thread = document.getElementById('messageThread');
+        const friendId = select.value;
+        if (!friendId) return;
+        thread.innerHTML = '<div class="empty-social">Loading messages...</div>';
+        const resp = await fetch(`/api/social/friends/${friendId}/messages`);
+        const data = await resp.json();
+        if (!resp.ok) {
+            thread.innerHTML = `<div class="empty-social">${escapeHtml(data.error || 'Could not load messages.')}</div>`;
+            return;
+        }
+        const messages = data.messages || [];
+        if (!messages.length) {
+            thread.innerHTML = '<div class="empty-social">No messages yet.</div>';
+            return;
+        }
+        if (typeof markSocialMessagesRead === 'function') {
+            markSocialMessagesRead(friendId, messages);
+        }
+        thread.innerHTML = messages.map(message => `
+            <div class="social-item message-row ${message.direction === 'outgoing' ? 'outgoing' : ''}">
+                <div class="social-item-meta">${message.direction === 'outgoing' ? 'You' : '@' + escapeHtml(message.sender.handle)} · ${escapeHtml(shortDate(message.created_at))}</div>
+                <div>${escapeHtml(message.body)}</div>
+            </div>
+        `).join('');
+        thread.scrollTop = thread.scrollHeight;
+    }
+
+    async function sendMessageToFriend() {
+        const select = document.getElementById('messageFriendSelect');
+        const input = document.getElementById('messageInput');
+        const friendId = select.value;
+        const body = input.value.trim();
+        if (!friendId || !body) return;
+        const resp = await fetch(`/api/social/friends/${friendId}/messages`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ body })
+        });
+        const data = await resp.json();
+        if (!resp.ok) return alert(data.error || 'Could not send message');
+        input.value = '';
+        await loadMessagesForSelectedFriend();
+        if (typeof refreshSocialNotifications === 'function') {
+            await refreshSocialNotifications();
+        }
+    }
+
+    async function loadRequests() {
+        const list = document.getElementById('requestsList');
+        try {
+            const resp = await fetch('/api/social/friend-requests');
+            const items = await resp.json();
+            if (!items.length) {
+                list.innerHTML = '<div class="empty-social">No friend requests.</div>';
+                return;
+            }
+            list.innerHTML = items.map(item => `
+                <div class="social-item">
+                    <div class="social-item-title">@${escapeHtml(item.user?.handle || item.handle)}</div>
+                    <div class="social-item-meta">${escapeHtml(item.direction)} - ${escapeHtml(item.status)}</div>
+                    ${item.direction === 'incoming' ? `<div class="social-actions" style="margin-top:0.6rem;"><button class="btn btn-primary panel-action" type="button" onclick="respondToRequest(${item.id}, 'accept')">Accept</button><button class="btn btn-secondary panel-action" type="button" onclick="respondToRequest(${item.id}, 'decline')">Decline</button></div>` : ''}
+                </div>
+            `).join('');
+        } catch (e) {
+            list.innerHTML = '<div class="empty-social">Could not load requests.</div>';
+        }
+    }
+
+    async function loadSocial() {
+        const resp = await fetch('/api/social/overview');
+        renderOverview(await resp.json());
+        await Promise.all([
+            loadRequests(),
+            typeof refreshSocialNotifications === 'function'
+                ? refreshSocialNotifications()
+                : Promise.resolve(),
+            document.getElementById('messageFriendSelect').value
+                ? loadMessagesForSelectedFriend()
+                : Promise.resolve(),
+        ]);
+    }
+
+    async function saveAccount(event) {
+        event.preventDefault();
+        const payload = {
+            handle: document.getElementById('handleInput').value.trim(),
+            password: document.getElementById('passwordInput').value,
+            service_url: document.getElementById('serviceUrlInput').value.trim()
+        };
+        if (payload.password.length < 8) return alert('Password must be at least 8 characters');
+        if (socialPageAuthMode === 'register' && payload.password !== document.getElementById('passwordConfirmInput').value) {
+            return alert('Passwords do not match');
+        }
+        const resp = await fetch(socialPageAuthMode === 'register' ? '/api/social/register' : '/api/social/login', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(payload)
+        });
+        const data = await resp.json();
+        if (!resp.ok) return alert(data.error || 'Could not save profile');
+        document.getElementById('passwordInput').value = '';
+        document.getElementById('passwordConfirmInput').value = '';
+        await loadSocial();
+    }
+
+    async function savePrivacy(event) {
+        event.preventDefault();
+        const payload = {
+            share_playtime: document.getElementById('sharePlaytime').checked,
+            share_last_played: document.getElementById('shareLastPlayed').checked,
+            visibility: document.getElementById('visibilitySelect').value
+        };
+        const resp = await fetch('/api/social/privacy', {
+            method: 'PUT',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(payload)
+        });
+        if (!resp.ok) return alert('Could not save privacy settings');
+        await loadSocial();
+    }
+
+    async function syncSocial() {
+        const resp = await fetch('/api/social/sync', { method: 'POST' });
+        const data = await resp.json();
+        if (!resp.ok) return alert(data.error || 'Social sync failed');
+        await loadSocial();
+        alert(`${data.message} ${data.game_count} games are in the snapshot.`);
+    }
+
+    async function searchPeople() {
+        const results = document.getElementById('searchResults');
+        const query = document.getElementById('searchInput').value.trim();
+        if (!query) return;
+        const resp = await fetch(`/api/social/search?q=${encodeURIComponent(query)}`);
+        const data = await resp.json();
+        if (!resp.ok) {
+            results.innerHTML = `<div class="empty-social">${escapeHtml(data.message || data.error || 'Search unavailable.')}</div>`;
+            return;
+        }
+        if (!data.length) {
+            results.innerHTML = '<div class="empty-social">No people found.</div>';
+            return;
+        }
+        results.innerHTML = data.map(person => `
+            <div class="social-item">
+                <div class="social-item-title">@${escapeHtml(person.handle)}</div>
+                <div class="social-actions" style="margin-top:0.6rem;">
+                    <button class="btn btn-primary panel-action" type="button" onclick="sendFriendRequest('${escapeHtml(person.handle)}')">Add Friend</button>
+                </div>
+            </div>
+        `).join('');
+    }
+
+    async function sendFriendRequest(handle) {
+        const resp = await fetch('/api/social/friend-requests', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ handle })
+        });
+        const data = await resp.json();
+        if (!resp.ok) return alert(data.error || 'Could not send friend request');
+        await refreshSocialAfterFriendChange();
+    }
+
+    async function respondToRequest(requestId, action) {
+        const resp = await fetch(`/api/social/friend-requests/${requestId}/${action}`, { method: 'POST' });
+        const data = await resp.json();
+        if (!resp.ok) return alert(data.error || 'Could not update friend request');
+        await refreshSocialAfterFriendChange();
+    }
+
+    async function refreshSocialAfterFriendChange() {
+        await loadSocial();
+        if (typeof checkFriendRequestNotifications === 'function') await checkFriendRequestNotifications();
+        document.getElementById('searchResults').innerHTML = '';
+    }
+
+    async function compareFriend() {
+        const results = document.getElementById('compareResults');
+        const friendIds = Array.from(document.getElementById('compareFriendSelect').selectedOptions).map(option => option.value);
+        if (!friendIds.length) {
+            results.innerHTML = '<div class="empty-social">No friends selected.</div>';
+            return;
+        }
+        const query = friendIds.map(id => `friend_id=${encodeURIComponent(id)}`).join('&');
+        const resp = await fetch(`/api/social/compare?${query}`);
+        const data = await resp.json();
+        if (!resp.ok) {
+            results.innerHTML = `<div class="empty-social">${escapeHtml(data.error || 'Comparison unavailable.')}</div>`;
+            return;
+        }
+        const picks = data.best_candidates || [];
+        const friendLabel = data.friend
+            ? `@${data.friend.handle}`
+            : (data.friends || []).map(friend => `@${friend.handle}`).join(', ') || (data.handles || []).map(handle => `@${handle}`).join(', ');
+        results.innerHTML = `
+            <div class="social-item">
+                <div class="social-item-title">${escapeHtml(friendLabel)} overlap</div>
+                <div class="social-item-meta">${data.shared_games.length} shared games, ${data.shared_installed_games.length} installed by both, ${data.shared_multiplayer_games.length} multiplayer-friendly.</div>
+            </div>
+            ${picks.length ? picks.map(item => `
+                <div class="social-item">
+                    <div class="social-item-title">${escapeHtml(item.title)}</div>
+                    <div class="social-item-meta">${escapeHtml(item.reason)}</div>
+                </div>
+            `).join('') : `<div class="empty-social">${escapeHtml(data.message || 'No cached overlap yet.')}</div>`}
+        `;
+    }
+
+    loadSocial().catch(() => {
+        document.getElementById('accountStatus').textContent = 'Could not load social state';
+    });
+
+    window.addEventListener('gigalib-social-notifications', () => {
+        if (socialState?.friends) {
+            renderFriends(socialState.friends);
+            renderMessageSelect(socialState.friends);
+        }
+    });
+</script>
+{% endblock %}

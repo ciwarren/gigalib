@@ -306,7 +306,7 @@ def _fallback_response(user_message, games, history=None, rate_limited=False):
     return "\n".join(lines)
 
 
-def ask_assistant(user_message, games, history=None):
+def ask_assistant(user_message, games, history=None, social_context=None):
     """Interactive chat with Gemini — full access to the game library data."""
     api_key = os.getenv("GEMINI_API_KEY")
     if not api_key or api_key == "your-gemini-api-key":
@@ -314,6 +314,7 @@ def ask_assistant(user_message, games, history=None):
 
     client = genai.Client(api_key=api_key)
     game_list, stats = _build_library_context(games)
+    social_context = social_context or {}
 
     system_instruction = f"""You are GigaLib Assistant — an elite video game curator, backlog strategist, and gaming culture expert with access to the user's game library data.
 
@@ -331,9 +332,15 @@ def ask_assistant(user_message, games, history=None):
 ## LIBRARY SNAPSHOT ({stats['prompt_games_included']} of {stats['total_games']} games):
 {json.dumps(game_list, separators=(",", ":"))}
 
+## SOCIAL CONTEXT:
+{json.dumps(social_context, separators=(",", ":"))}
+
 ## RULES:
 - Use the library stats for precise aggregate numbers.
 - Use the library snapshot for recommendations and examples.
+- If the user mentions an @handle, treat that as a friend/social-library query first. Use SOCIAL CONTEXT for that handle, not the local user's library.
+- If SOCIAL CONTEXT has friend_library data for the mentioned handle, answer from that data and state if the list is truncated.
+- If SOCIAL CONTEXT says a mentioned handle is missing or unavailable, say you cannot access that friend's synced library yet instead of guessing.
 - If the user asks for an exhaustive list and data is missing from snapshot, say so briefly and offer to narrow scope.
 - When recommending, pull FROM their library unless they ask about new purchases.
 - If they ask data questions ("how many...?", "list all...?", "which games...?"), query the library data above and give precise answers.
