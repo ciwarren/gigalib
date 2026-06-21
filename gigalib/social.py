@@ -60,7 +60,10 @@ def _service_url(account=None, service_url=None):
     base_url = (
         service_url or (account.service_url if account else None) or DEFAULT_SERVICE_URL
     )
-    return base_url.rstrip("/")
+    normalized = base_url.rstrip("/")
+    if normalized in {"https://api.gigalib.uk", "http://api.gigalib.uk"}:
+        return "http://api.gigalib.uk:8081"
+    return normalized
 
 
 def _remote_request(method, path, account=None, service_url=None, **kwargs):

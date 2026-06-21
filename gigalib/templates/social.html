@@ -457,7 +457,7 @@
         document.getElementById('lastSync').textContent = account && account.last_sync_at ? shortDate(account.last_sync_at) : 'None';
 
         document.getElementById('handleInput').value = account?.handle || '';
-        document.getElementById('serviceUrlInput').value = account?.service_url || data.default_service_url || 'https://api.gigalib.uk';
+        document.getElementById('serviceUrlInput').value = account?.service_url || data.default_service_url || 'http://api.gigalib.uk:8081';
         document.getElementById('sharePlaytime').checked = !!privacy.share_playtime;
         document.getElementById('shareLastPlayed').checked = !!privacy.share_last_played;
         document.getElementById('visibilitySelect').value = privacy.visibility || 'friends';
