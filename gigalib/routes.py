@@ -337,6 +337,19 @@ def _build_social_context_for_message(message):
     return context
 
 
+def _launch_url_for_game(game):
+    if game.platform == "steam" and game.app_id:
+        return f"steam://rungameid/{game.app_id}"
+    if game.platform == "ea" and game.app_id:
+        if game.app_id.startswith("Origin.OFR"):
+            return f"origin2://game/launch?offerIds={game.app_id}"
+        # GUID-based older Origin games
+        return f"link2ea://launchgame/{game.app_id}"
+    if game.platform == "ubisoft" and game.app_id:
+        return f"uplay://launch/{game.app_id}"
+    return None
+
+
 def _queue_app_open_sync():
     from gigalib.app import trigger_open_sync
 
@@ -698,28 +711,27 @@ def enrich_status():
 def get_game(game_id):
     """Get a single game's full details."""
     game = Game.query.get_or_404(game_id)
-    return jsonify(game.to_dict())
+    payload = game.to_dict()
+    payload["can_launch"] = bool(_launch_url_for_game(game))
+    return jsonify(payload)
 
 
 @main_bp.route("/games/<int:game_id>/launch", methods=["POST"])
 def launch_game(game_id):
     """Launch a game via its platform protocol."""
     game = Game.query.get_or_404(game_id)
-    launch_url = None
-
-    if game.platform == "steam" and game.app_id:
-        launch_url = f"steam://rungameid/{game.app_id}"
-    elif game.platform == "ea" and game.app_id:
-        if game.app_id.startswith("Origin.OFR"):
-            launch_url = f"origin2://game/launch?offerIds={game.app_id}"
-        else:
-            # GUID-based older Origin games
-            launch_url = f"link2ea://launchgame/{game.app_id}"
-    elif game.platform == "ubisoft" and game.app_id:
-        launch_url = f"uplay://launch/{game.app_id}"
+    launch_url = _launch_url_for_game(game)
 
     if not launch_url:
-        return jsonify({"error": "No launch URL available for this game"}), 400
+        return (
+            jsonify(
+                {
+                    "error": "No launch URL available for this game",
+                    "details": f"Platform '{game.platform}' requires a valid app_id.",
+                }
+            ),
+            400,
+        )
 
     try:
         os.startfile(launch_url)

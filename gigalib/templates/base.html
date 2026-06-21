@@ -1255,6 +1255,7 @@
                 const safeTitle = escapeHtml(game.title || 'Unknown game');
                 const safePlatform = String(game.platform || 'unknown').toLowerCase().replace(/[^a-z0-9_-]/g, '');
                 const launchGameId = Number.isFinite(Number(game.id)) ? Number(game.id) : 0;
+                const canLaunch = !!game.can_launch;
                 const imageUrl = safeImageUrl(game.image_url);
                 
                 let html = `<div style="display:flex;gap:1rem;margin-bottom:1rem;">`;
@@ -1266,7 +1267,7 @@
                     <h3 style="margin-bottom:0.3rem;">${safeTitle}</h3>
                     <span class="platform-badge platform-${safePlatform}">${escapeHtml(game.platform)}</span>
                     ${game.is_installed ? '<span style="color:#10b981;font-size:0.75rem;margin-left:0.5rem;">● Installed</span>' : ''}
-                    ${launchGameId ? `<button onclick="launchGame(${launchGameId})" style="margin-left:0.5rem;padding:0.2rem 0.6rem;font-size:0.75rem;background:var(--accent);color:#fff;border:none;border-radius:4px;cursor:pointer;">▶ Launch</button>` : ''}
+                    ${launchGameId && canLaunch ? `<button onclick="launchGame(${launchGameId})" style="margin-left:0.5rem;padding:0.2rem 0.6rem;font-size:0.75rem;background:var(--accent);color:#fff;border:none;border-radius:4px;cursor:pointer;">▶ Launch</button>` : ''}
                 </div></div>`;
 
                 if (game.description) {
