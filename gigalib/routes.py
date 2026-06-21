@@ -347,6 +347,14 @@ def _launch_url_for_game(game):
         return f"link2ea://launchgame/{game.app_id}"
     if game.platform == "ubisoft" and game.app_id:
         return f"uplay://launch/{game.app_id}"
+    if game.platform == "xbox" and game.app_id:
+        app_id = str(game.app_id).strip()
+        # OpenXBL title IDs are numeric and work with Xbox PC launcher protocol.
+        if re.fullmatch(r"\d{6,12}", app_id):
+            return f"msgamelaunch://launch/?titleId={app_id}"
+        # If we have a Store ProductId (for some catalog sources), open PDP as fallback.
+        if re.fullmatch(r"[A-Za-z0-9]{12}", app_id):
+            return f"ms-windows-store://pdp/?ProductId={app_id.upper()}"
     return None
 
 
