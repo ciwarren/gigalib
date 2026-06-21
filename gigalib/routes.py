@@ -21,6 +21,7 @@ from gigalib.social import (SocialServiceError, accept_remote_friend_request,
                             get_or_create_privacy_settings,
                             list_remote_friend_requests, list_remote_friends,
                             list_remote_messages, login_remote_account,
+                            remove_remote_friend,
                             register_remote_account, search_remote_users,
                             send_remote_friend_request, send_remote_message,
                             social_overview, sync_local_social_snapshot,
@@ -537,6 +538,14 @@ def list_social_friends():
     except SocialServiceError:
         overview = social_overview(_deduped_game_records(_game_records_query()))
         return jsonify(overview["friends"])
+
+
+@main_bp.route("/api/social/friends/<int:friend_id>", methods=["DELETE"])
+def delete_social_friend(friend_id):
+    try:
+        return jsonify(remove_remote_friend(friend_id))
+    except SocialServiceError as exc:
+        return jsonify({"error": exc.message}), exc.status_code
 
 
 @main_bp.route("/api/social/friends/<int:friend_id>/library")

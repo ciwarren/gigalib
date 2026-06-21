@@ -177,6 +177,27 @@ def register_routes(app):
             ]
         )
 
+    @app.delete("/v1/friends/<int:friend_id>")
+    @require_auth
+    def remove_friend(friend_id):
+        if friend_id == g.current_user.id:
+            return jsonify({"error": "You cannot unfriend yourself"}), 400
+
+        friend = db.session.get(User, friend_id)
+        if not friend:
+            return jsonify({"error": "Friend not found"}), 404
+
+        user_a_id, user_b_id = Friendship.ordered_pair(g.current_user.id, friend_id)
+        friendship = Friendship.query.filter_by(
+            user_a_id=user_a_id, user_b_id=user_b_id
+        ).first()
+        if not friendship:
+            return jsonify({"error": "Friend not found"}), 404
+
+        db.session.delete(friendship)
+        db.session.commit()
+        return jsonify({"ok": True, "removed_friend": friend.to_dict()})
+
     @app.get("/v1/messages")
     @require_auth
     def list_messages():

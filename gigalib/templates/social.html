@@ -478,8 +478,23 @@
             <div class="social-item">
                 <div class="social-item-title"><span class="presence-dot ${friend.is_online ? 'online' : ''}"></span>@${escapeHtml(friend.handle)}</div>
                 <div class="social-item-meta">${friend.is_online ? 'Online now' : 'Offline'} · Library shared: ${escapeHtml(shortDate(friend.last_library_sync_at))}${typeof getUnreadMessageCountForFriend === 'function' && getUnreadMessageCountForFriend(friend.id) > 0 ? ` · ${getUnreadMessageCountForFriend(friend.id)} unread` : ''}</div>
+                <div class="social-actions" style="margin-top:0.6rem;">
+                    <button class="btn btn-secondary panel-action" type="button" onclick="unfriend(${friend.id}, '${escapeHtml(friend.handle)}')">Unfriend</button>
+                </div>
             </div>
         `).join('');
+    }
+
+    async function unfriend(friendId, handle) {
+        const confirmed = window.confirm(`Remove @${handle} from your friends list?`);
+        if (!confirmed) return;
+
+        const resp = await fetch(`/api/social/friends/${friendId}`, { method: 'DELETE' });
+        const data = await resp.json();
+        if (!resp.ok) {
+            return alert(data.error || 'Could not unfriend this user.');
+        }
+        await refreshSocialAfterFriendChange();
     }
 
     function renderCompareSelect(friends) {

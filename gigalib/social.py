@@ -6,8 +6,8 @@ from datetime import datetime, timezone
 import requests
 
 from gigalib import db
-from gigalib.models import (AccountLink, Friend, RemoteLibrarySnapshot,
-                            SocialPrivacySettings)
+from gigalib.models import (AccountLink, Friend, FriendRequest,
+                            RemoteLibrarySnapshot, SocialPrivacySettings)
 
 SNAPSHOT_VERSION = 1
 DEFAULT_SERVICE_URL = os.getenv("GIGALIB_SOCIAL_URL", "http://api.gigalib.uk:8081")
@@ -248,6 +248,25 @@ def decline_remote_friend_request(request_id):
         f"/v1/friend-requests/{request_id}/decline",
         account=account,
     )
+
+
+def remove_remote_friend(friend_id):
+    account = _require_connected_account()
+    friend = db.session.get(Friend, friend_id)
+    if not friend:
+        raise SocialServiceError("Friend not found", 404)
+
+    payload = _remote_request(
+        "DELETE",
+        f"/v1/friends/{friend.remote_user_id}",
+        account=account,
+    )
+
+    RemoteLibrarySnapshot.query.filter_by(remote_user_id=friend.remote_user_id).delete()
+    FriendRequest.query.filter_by(handle=friend.handle).delete()
+    db.session.delete(friend)
+    db.session.commit()
+    return payload
 
 
 def search_remote_users(query):
