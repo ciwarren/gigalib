@@ -33,12 +33,14 @@ GigaLib can also connect to the lightweight standalone Social API so you can add
 ```powershell
 git clone <your-repo-url> Gigalib
 cd Gigalib
-uv sync
+.\scripts\setup.ps1
 ```
+
+The setup wizard installs dependencies, creates `.env`, and can optionally install the app as a login startup task. If you want the standalone Social API on the same machine, run `.\scripts\install_social.ps1` separately.
 
 ### 2. Configure environment
 
-Copy the example env file and fill in your API keys:
+The setup wizard creates `.env` for you and can prompt for API keys. If you prefer a manual setup path, copy the example env file first:
 
 ```powershell
 Copy-Item .env.example .env
@@ -137,6 +139,8 @@ Set `GIGALIB_SOCIAL_URL` in `.env` to use that service or your own hosted Social
 uv run python scripts/serve_social.py --host 127.0.0.1 --port 8081
 ```
 
+For a one-click Windows install of the social service, run `.\scripts\install_social.ps1`.
+
 Health check:
 
 ```powershell
@@ -188,6 +192,7 @@ Gigalib/
 │   ├── serve_social.py # Standalone Social API server
 │   ├── enrich.py       # CLI enrichment tool
 │   ├── setup.ps1       # Interactive setup wizard
+│   ├── install_social.ps1 # Separate Social API installer
 │   └── install_service.py  # Windows Task Scheduler service installer
 └── instance/
     └── gigalib.db      # SQLite database (auto-created)

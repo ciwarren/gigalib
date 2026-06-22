@@ -26,6 +26,35 @@ function Write-Ok($msg) { Write-Host "  OK: $msg" -ForegroundColor Green }
 function Write-Warn($msg) { Write-Host "  WARN: $msg" -ForegroundColor Yellow }
 function Write-Err($msg) { Write-Host "  ERROR: $msg" -ForegroundColor Red }
 
+function New-RandomSecret {
+    param([int]$Length = 32)
+
+    $chars = ((48..57) + (65..90) + (97..122)) | Get-Random -Count $Length
+    return -join ($chars | ForEach-Object { [char]$_ })
+}
+
+function Set-EnvValue {
+    param(
+        [string]$Path,
+        [string]$Key,
+        [string]$Value
+    )
+
+    $content = Get-Content $Path -Raw
+    $pattern = "(?m)^$([regex]::Escape($Key))=.*$"
+    $replacement = "$Key=$Value"
+    if ($content -match $pattern) {
+        $content = [regex]::Replace($content, $pattern, [System.Text.RegularExpressions.MatchEvaluator]{ param($m) $replacement })
+    } else {
+        if (-not $content.EndsWith("`n")) {
+            $content += "`n"
+        }
+        $content += "$replacement`n"
+    }
+
+    Set-Content $Path $content -NoNewline
+}
+
 # ─────────────────────────────────────────────────────────────────────────────
 Write-Host ""
 Write-Host "  ╔══════════════════════════════════════╗" -ForegroundColor Magenta
@@ -49,22 +78,24 @@ if ($major -lt 3 -or ($major -eq 3 -and $minor -lt 11)) {
     Write-Err "Python 3.11+ required (found $pythonVersion)"
     exit 1
 }
-Write-Ok "Python $major.$minor"
+Write-Ok "Python $($major).$($minor)"
 
 # Check uv
 $uvPath = Get-Command uv -ErrorAction SilentlyContinue
 if (-not $uvPath) {
     # Try common install location
-    $env:Path = "C:\Users\$env:USERNAME\.local\bin;$env:Path"
+    $userLocalBin = Join-Path ('C:\Users\' + $env:USERNAME) '.local\bin'
+    $env:Path = $userLocalBin + ';' + $env:Path
     $uvPath = Get-Command uv -ErrorAction SilentlyContinue
 }
 if (-not $uvPath) {
-    Write-Warn "uv not found. Installing..."
+    Write-Warn 'uv not found. Installing...'
     Invoke-RestMethod https://astral.sh/uv/install.ps1 | Invoke-Expression
-    $env:Path = "C:\Users\$env:USERNAME\.local\bin;$env:Path"
+    $userLocalBin = Join-Path ('C:\Users\' + $env:USERNAME) '.local\bin'
+    $env:Path = $userLocalBin + ';' + $env:Path
 }
 $uvVersion = & uv --version 2>&1
-Write-Ok "uv $uvVersion"
+Write-Ok ("uv " + $uvVersion)
 
 # ─────────────────────────────────────────────────────────────────────────────
 Write-Step 2 "Installing dependencies"
@@ -89,9 +120,8 @@ if (-not (Test-Path ".env")) {
 # Generate SECRET_KEY if still placeholder
 $envContent = Get-Content .env -Raw
 if ($envContent -match "SECRET_KEY=your-secret-key-here") {
-    $secretKey = -join ((48..57) + (65..90) + (97..122) | Get-Random -Count 32 | ForEach-Object { [char]$_ })
-    $envContent = $envContent -replace "SECRET_KEY=your-secret-key-here", "SECRET_KEY=$secretKey"
-    Set-Content .env $envContent -NoNewline
+    $secretKey = New-RandomSecret
+    Set-EnvValue -Path ".env" -Key "SECRET_KEY" -Value $secretKey
     Write-Ok "Generated random SECRET_KEY"
 }
 
@@ -125,12 +155,12 @@ if ($configure -eq "y") {
         }
     }
 
-    Set-EnvKey "STEAM_API_KEY" "Steam API Key" "https://steamcommunity.com/dev/apikey"
-    Set-EnvKey "STEAM_USER_ID" "Steam User ID (64-bit)" "https://steamid.io"
-    Set-EnvKey "XBOX_API_KEY" "OpenXBL API Key" "https://xbl.io"
-    Set-EnvKey "TWITCH_CLIENT_ID" "Twitch Client ID" "https://dev.twitch.tv/console"
-    Set-EnvKey "TWITCH_CLIENT_SECRET" "Twitch Client Secret" "(same app)"
-    Set-EnvKey "GEMINI_API_KEY" "Gemini API Key" "https://aistudio.google.com/apikey"
+    Set-EnvKey -key "STEAM_API_KEY" -prompt "Steam API Key" -url "https://steamcommunity.com/dev/apikey"
+    Set-EnvKey -key "STEAM_USER_ID" -prompt "Steam User ID 64-bit" -url "https://steamid.io"
+    Set-EnvKey -key "XBOX_API_KEY" -prompt "OpenXBL API Key" -url "https://xbl.io"
+    Set-EnvKey -key "TWITCH_CLIENT_ID" -prompt "Twitch Client ID" -url "https://dev.twitch.tv/console"
+    Set-EnvKey -key "TWITCH_CLIENT_SECRET" -prompt "Twitch Client Secret" -url "(same app)"
+    Set-EnvKey -key "GEMINI_API_KEY" -prompt "Gemini API Key" -url "https://aistudio.google.com/apikey"
 
     Set-Content .env $envContent -NoNewline
     Write-Ok "API keys saved to .env"
@@ -178,7 +208,20 @@ if ($LASTEXITCODE -eq 0) {
 }
 
 # ─────────────────────────────────────────────────────────────────────────────
-Write-Step 6 "Done!"
+Write-Step 6 "Installing app startup task"
+
+$installTasks = Read-Host "  Install Windows startup task for GigaLib? (y/n)"
+if ($installTasks -eq "y") {
+    uv run python scripts/install_service.py install --target app
+    if ($LASTEXITCODE -ne 0) {
+        Write-Err "Startup task installation failed"
+        exit 1
+    }
+    Write-Ok "Startup task installed"
+}
+
+# ─────────────────────────────────────────────────────────────────────────────
+Write-Step 7 "Done!"
 
 Write-Host ""
 Write-Host "  GigaLib is ready to go!" -ForegroundColor Green
@@ -189,4 +232,6 @@ Write-Host ""
 Write-Host "  Then open http://127.0.0.1:5000" -ForegroundColor White
 Write-Host ""
 Write-Host "  First time? Click 'Sync' to detect games, then 'Enrich' to fetch metadata." -ForegroundColor DarkGray
+Write-Host "  If you installed the startup task, GigaLib will auto-launch at login." -ForegroundColor DarkGray
+Write-Host "  Run scripts/install_social.ps1 separately if you want the Social API installed too." -ForegroundColor DarkGray
 Write-Host ""
