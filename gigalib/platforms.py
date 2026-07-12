@@ -97,6 +97,24 @@ def _hours_from_minutes(minutes):
         return None
 
 
+def _fetch_xbl_playtime_minutes(title_ids):
+    """Return ``{title_id: minutes}`` from Xbox Live, or ``{}`` on any failure.
+
+    Isolated behind a lazy import so a missing ``xbox-webapi`` install (or a
+    machine that hasn't run the one-time login) never breaks ``sync_xbox()``.
+    """
+    if not title_ids:
+        return {}
+    try:
+        from gigalib import xbox_stats
+    except ImportError:
+        return {}
+    try:
+        return xbox_stats.fetch_playtime_minutes(title_ids)
+    except Exception:  # pragma: no cover - defensive
+        return {}
+
+
 def _xbox_title_id(item):
     return str(
         item.get("titleId")
@@ -476,6 +494,12 @@ def sync_xbox():
 
             matched_history.add(title_id)
             last_played = title.get("titleHistory", {}).get("lastTimePlayed", "")
+            # OpenXBL free tier's /v2/titles returns a stub stats object
+            # ({"sourceVersion": N}) with no minutesPlayed. Real per-title
+            # playtime comes from Xbox Live's userstats.xboxlive.com/batch,
+            # fetched below via gigalib.xbox_stats after this loop collects
+            # the title ids. Leave the raw payload path as a fallback in case
+            # a future OpenXBL upgrade restores the field.
             playtime_hours = _hours_from_minutes(
                 title.get("stats", {}).get("minutesPlayed")
             )
@@ -493,6 +517,16 @@ def sync_xbox():
             ):
                 added += 1
 
+        # After the catalog + history rows exist, hydrate playtime for every
+        # history title via the direct Xbox Live userstats endpoint. This is
+        # the only path that actually returns MinutesPlayed today; skipped
+        # cleanly if the user hasn't run `python -m gigalib.xbox_stats login`.
+        xbl_minutes = _fetch_xbl_playtime_minutes(matched_history)
+        for title_id, minutes in xbl_minutes.items():
+            row = Game.query.filter_by(platform="xbox", app_id=title_id).first()
+            if row is not None:
+                row.playtime_hours = round(minutes / 60, 1)
+
         db.session.commit()
         return {
             "status": "ok",
@@ -501,6 +535,7 @@ def sync_xbox():
             "history_total": len(history_titles),
             "matched_history": len(matched_history),
             "installed_detected": len(installed_ids),
+            "playtime_fetched": len(xbl_minutes),
             "added": added,
         }
 

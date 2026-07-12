@@ -54,6 +54,7 @@ Edit `.env` with your keys:
 | `STEAM_API_KEY` | [Steam Web API](https://steamcommunity.com/dev/apikey) |
 | `STEAM_USER_ID` | Your Steam64 ID (find at [steamid.io](https://steamid.io)) |
 | `XBOX_API_KEY` | [OpenXBL](https://xbl.io) — free tier works |
+| `XBOX_CLIENT_ID` | *Optional.* Override the bundled OAuth client id for Xbox playtime — see [Xbox playtime](#xbox-playtime-optional-one-time-browser-login) |
 | `GEMINI_API_KEY` | [Google AI Studio](https://aistudio.google.com/apikey) |
 | `TWITCH_CLIENT_ID` | [Twitch Dev Console](https://dev.twitch.tv/console) (for IGDB) |
 | `TWITCH_CLIENT_SECRET` | Same Twitch app as above |
@@ -233,6 +234,29 @@ Gigalib/
 1. Create free account at https://xbl.io
 2. Go to Settings → API Keys
 3. Copy your key
+
+#### Xbox playtime (optional, one-time browser login)
+OpenXBL's free tier does not expose per-title `MinutesPlayed`. To populate
+real Xbox playtime hours, run this once:
+
+```powershell
+.\.venv\Scripts\python.exe -m gigalib.xbox_stats login
+```
+
+Your browser opens automatically, you sign in with the Microsoft account
+that owns the games and approve consent, and the login script captures the
+callback silently — no copy-paste needed. Tokens are saved to
+`instance/xbox_tokens.json` (git-ignored) and auto-refreshed on every sync.
+
+GigaLib ships with a bundled public OAuth client id — no Azure setup
+required. If you'd rather use your own Azure app registration, register it
+at portal.azure.com → App registrations → *Personal Microsoft accounts
+only*, add `http://localhost` as a *Mobile and desktop applications*
+redirect URI, enable *Allow public client flows*, then set
+`XBOX_CLIENT_ID` in `.env` to your client id.
+
+If you skip this step entirely, Xbox rows still sync but `playtime_hours`
+stays empty.
 
 ### IGDB (via Twitch)
 1. Create a Twitch account and go to https://dev.twitch.tv/console
