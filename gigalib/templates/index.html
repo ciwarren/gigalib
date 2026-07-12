@@ -1286,6 +1286,52 @@
             return enabled ? 'On' : 'Off';
         }
 
+        // Text rewrites applied before handing a message to Kokoro. Ordered:
+        // dollars runs before decimals so "$5.99" becomes "5 point 99 dollars"
+        // rather than "$5 point 99 dollars". Add new entries here — regexes
+        // must be /g so the whole message is scanned.
+        const SPEECH_SUBSTITUTIONS = [
+            // "$5" / "$5.99" — whole word so we don't touch code identifiers.
+            { pattern: /\$\s*(\d+(?:\.\d+)?)\b/g, replacement: '$1 dollars' },
+            // Decimals — say "37.5" as "37 point 5". Negative lookahead skips
+            // version numbers / IPs like "1.2.3" or "192.168.1.1".
+            { pattern: /(\d+)\.(\d+)(?!\.\d)/g, replacement: '$1 point $2' },
+            // "50%" → "50 percent"
+            { pattern: /(\d)\s*%/g, replacement: '$1 percent' },
+            // Temperatures — check °F / °C before the bare ° fallback.
+            { pattern: /(\d)\s*°\s*F\b/g, replacement: '$1 degrees Fahrenheit' },
+            { pattern: /(\d)\s*°\s*C\b/g, replacement: '$1 degrees Celsius' },
+            { pattern: /(\d)\s*°/g, replacement: '$1 degrees' },
+            // Common Latin abbreviations that trip phoneme engines.
+            { pattern: /\be\.g\.\s*/gi, replacement: 'for example, ' },
+            { pattern: /\bi\.e\.\s*/gi, replacement: 'that is, ' },
+            { pattern: /\bvs\.\s*/gi, replacement: 'versus ' },
+            { pattern: /\betc\.\s*/gi, replacement: 'etcetera ' },
+            // Ampersand between words.
+            { pattern: /\s+&\s+/g, replacement: ' and ' },
+
+            // Gamer / tech acronyms Kokoro tends to mispronounce. Spelled out
+            // with spaces so the engine reads them letter-by-letter. Ordered
+            // longest-first among overlapping families (MMORPG before MMO).
+            { pattern: /\bMMORPG\b/gi, replacement: 'M M O R P G' },
+            { pattern: /\bMMO\b/gi, replacement: 'M M O' },
+            { pattern: /\bRPG\b/gi, replacement: 'R P G' },
+            { pattern: /\bFPS\b/gi, replacement: 'F P S' },
+            { pattern: /\bDPS\b/gi, replacement: 'D P S' },
+            { pattern: /\bNPC(s?)\b/gi, replacement: 'N P C$1' },
+            { pattern: /\bDLC\b/gi, replacement: 'D L C' },
+            { pattern: /\bPvP\b/g, replacement: 'P v P' },
+            { pattern: /\bPvE\b/g, replacement: 'P v E' },
+            { pattern: /\bWASD\b/gi, replacement: 'W A S D' },
+            { pattern: /\bAFK\b/gi, replacement: 'A F K' },
+            { pattern: /\bIRL\b/gi, replacement: 'in real life' },
+            { pattern: /\bFOV\b/gi, replacement: 'F O V' },
+            { pattern: /\bGPU\b/gi, replacement: 'G P U' },
+            { pattern: /\bCPU\b/gi, replacement: 'C P U' },
+            { pattern: /\bTL;?DR\b/gi, replacement: "too long, didn't read" },
+            { pattern: /\bAAA\b/g, replacement: 'triple A' },
+        ];
+
         function stripForSpeech(text) {
             if (!text) return '';
             let s = String(text);
@@ -1297,6 +1343,9 @@
             s = s.replace(/(\*\*|__|\*|_|~~)/g, '');
             s = s.replace(/^\s*[-*+]\s+/gm, '');
             s = s.replace(/<[^>]+>/g, ' ');
+            for (const { pattern, replacement } of SPEECH_SUBSTITUTIONS) {
+                s = s.replace(pattern, replacement);
+            }
             s = s.replace(/\s+/g, ' ').trim();
             return s;
         }
