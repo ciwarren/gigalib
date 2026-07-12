@@ -492,7 +492,8 @@
         const resp = await fetch(`/api/social/friends/${friendId}`, { method: 'DELETE' });
         const data = await resp.json();
         if (!resp.ok) {
-            return alert(data.error || 'Could not unfriend this user.');
+            showToast(data.error || 'Could not unfriend this user.', 'error');
+            return;
         }
         await refreshSocialAfterFriendChange();
     }
@@ -571,7 +572,7 @@
             body: JSON.stringify({ body })
         });
         const data = await resp.json();
-        if (!resp.ok) return alert(data.error || 'Could not send message');
+        if (!resp.ok) { showToast(data.error || 'Could not send message', 'error'); return; }
         input.value = '';
         await loadMessagesForSelectedFriend();
         if (typeof refreshSocialNotifications === 'function') {
@@ -621,9 +622,10 @@
             password: document.getElementById('passwordInput').value,
             service_url: document.getElementById('serviceUrlInput').value.trim()
         };
-        if (payload.password.length < 8) return alert('Password must be at least 8 characters');
+        if (payload.password.length < 8) { showToast('Password must be at least 8 characters', 'error'); return; }
         if (socialPageAuthMode === 'register' && payload.password !== document.getElementById('passwordConfirmInput').value) {
-            return alert('Passwords do not match');
+            showToast('Passwords do not match', 'error');
+            return;
         }
         const resp = await fetch(socialPageAuthMode === 'register' ? '/api/social/register' : '/api/social/login', {
             method: 'POST',
@@ -631,7 +633,7 @@
             body: JSON.stringify(payload)
         });
         const data = await resp.json();
-        if (!resp.ok) return alert(data.error || 'Could not save profile');
+        if (!resp.ok) { showToast(data.error || 'Could not save profile', 'error'); return; }
         document.getElementById('passwordInput').value = '';
         document.getElementById('passwordConfirmInput').value = '';
         await loadSocial();
@@ -649,16 +651,16 @@
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify(payload)
         });
-        if (!resp.ok) return alert('Could not save privacy settings');
+        if (!resp.ok) { showToast('Could not save privacy settings', 'error'); return; }
         await loadSocial();
     }
 
     async function syncSocial() {
         const resp = await fetch('/api/social/sync', { method: 'POST' });
         const data = await resp.json();
-        if (!resp.ok) return alert(data.error || 'Social sync failed');
+        if (!resp.ok) { showToast(data.error || 'Social sync failed', 'error'); return; }
         await loadSocial();
-        alert(`${data.message} ${data.game_count} games are in the snapshot.`);
+        showToast(`${data.message} · ${data.game_count} games in snapshot`, 'success');
     }
 
     async function searchPeople() {
@@ -692,14 +694,14 @@
             body: JSON.stringify({ handle })
         });
         const data = await resp.json();
-        if (!resp.ok) return alert(data.error || 'Could not send friend request');
+        if (!resp.ok) { showToast(data.error || 'Could not send friend request', 'error'); return; }
         await refreshSocialAfterFriendChange();
     }
 
     async function respondToRequest(requestId, action) {
         const resp = await fetch(`/api/social/friend-requests/${requestId}/${action}`, { method: 'POST' });
         const data = await resp.json();
-        if (!resp.ok) return alert(data.error || 'Could not update friend request');
+        if (!resp.ok) { showToast(data.error || 'Could not update friend request', 'error'); return; }
         await refreshSocialAfterFriendChange();
     }
 

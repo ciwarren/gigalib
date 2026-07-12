@@ -887,9 +887,51 @@
         .install-btn.visible {
             display: inline-flex;
         }
+
+        /* Global top-of-page toast stack. Populated via window.showToast. */
+        #toastStack {
+            position: fixed;
+            top: 12px;
+            left: 50%;
+            transform: translateX(-50%);
+            display: flex;
+            flex-direction: column;
+            gap: 0.4rem;
+            z-index: 9999;
+            pointer-events: none;
+            max-width: min(560px, calc(100vw - 24px));
+            width: max-content;
+        }
+        #toastStack .toast {
+            pointer-events: auto;
+            padding: 0.6rem 0.9rem;
+            border-radius: 10px;
+            background: rgba(28, 24, 28, 0.94);
+            color: var(--text-primary);
+            border: 1px solid rgba(255, 255, 255, 0.08);
+            box-shadow: var(--shadow);
+            font-size: 0.85rem;
+            cursor: pointer;
+            animation: toastIn 0.16s ease-out;
+        }
+        #toastStack .toast.error {
+            border-color: rgba(255, 100, 100, 0.55);
+            color: #ffb3b3;
+            background: linear-gradient(180deg, rgba(60, 20, 20, 0.96), rgba(40, 12, 12, 0.96));
+        }
+        #toastStack .toast.success {
+            border-color: rgba(83, 247, 125, 0.55);
+            color: #a9f6b8;
+            background: linear-gradient(180deg, rgba(18, 46, 24, 0.96), rgba(12, 32, 16, 0.96));
+        }
+        @keyframes toastIn {
+            from { opacity: 0; transform: translateY(-6px); }
+            to { opacity: 1; transform: none; }
+        }
     </style>
 </head>
 <body>
+    <div id="toastStack" aria-live="polite" aria-atomic="false"></div>
     <nav class="navbar">
         <a class="brand-link" href="/">
             <img src="/static/logo-transparent-192.png" alt="GigaLib logo">
@@ -1002,11 +1044,29 @@
         let socialAuthMode = 'login';
         let socialNotificationPollTimer = null;
         let socialNotificationPollInFlight = false;
+        let socialNotificationsSeeded = false;
         const socialNotificationState = {
             accountHandle: '',
             requestCount: 0,
             unreadByFriend: {},
             unreadCount: 0,
+        };
+
+        // Top-of-page transient toasts. Level: 'error' | 'success' | anything
+        // else = neutral. Auto-dismiss after ttlMs (default 5s). Click to close.
+        window.showToast = function (message, level, ttlMs) {
+            if (!message) return;
+            const stack = document.getElementById('toastStack');
+            if (!stack) return;
+            const el = document.createElement('div');
+            const cls = level === 'error' ? ' error' : (level === 'success' ? ' success' : '');
+            el.className = 'toast' + cls;
+            el.textContent = String(message);
+            el.title = 'Click to dismiss';
+            const close = () => { if (el.parentNode) el.parentNode.removeChild(el); };
+            el.addEventListener('click', close);
+            stack.appendChild(el);
+            setTimeout(close, Math.max(1500, ttlMs || 5000));
         };
 
         window.addEventListener('beforeinstallprompt', (e) => {
@@ -1022,7 +1082,7 @@
 
         async function installPWA() {
             if (!deferredPrompt) {
-                alert('GigaLib is already installable from your browser menu');
+                showToast('GigaLib is already installable from your browser menu', 'info');
                 return;
             }
             deferredPrompt.prompt();
@@ -1305,9 +1365,31 @@
                 return;
             }
             socialNotificationPollInFlight = true;
+            const prevRequestCount = socialNotificationState.requestCount || 0;
+            const prevUnreadCount = socialNotificationState.unreadCount || 0;
             try {
                 await checkFriendRequestNotifications();
                 await refreshUnreadMessageNotifications();
+
+                // Only toast arrivals after the first successful poll — otherwise
+                // every page load spams "new request/message" for pre-existing state.
+                if (socialNotificationsSeeded && typeof window.showToast === 'function') {
+                    const newRequests = (socialNotificationState.requestCount || 0) - prevRequestCount;
+                    if (newRequests > 0) {
+                        window.showToast(
+                            newRequests === 1 ? 'New friend request' : `${newRequests} new friend requests`,
+                            'info'
+                        );
+                    }
+                    const newMessages = (socialNotificationState.unreadCount || 0) - prevUnreadCount;
+                    if (newMessages > 0) {
+                        window.showToast(
+                            newMessages === 1 ? 'New message' : `${newMessages} new messages`,
+                            'info'
+                        );
+                    }
+                }
+                socialNotificationsSeeded = true;
             } finally {
                 socialNotificationPollInFlight = false;
             }
@@ -1339,9 +1421,9 @@
             const password = document.getElementById('socialSignInPasswordInput').value;
             const passwordConfirm = document.getElementById('socialSignInPasswordConfirmInput').value;
             const serviceUrl = document.getElementById('socialSignInUrlInput').value.trim();
-            if (!handle) return alert('Handle is required');
-            if (password.length < 8) return alert('Password must be at least 8 characters');
-            if (socialAuthMode === 'register' && password !== passwordConfirm) return alert('Passwords do not match');
+            if (!handle) { showToast('Handle is required', 'error'); return; }
+            if (password.length < 8) { showToast('Password must be at least 8 characters', 'error'); return; }
+            if (socialAuthMode === 'register' && password !== passwordConfirm) { showToast('Passwords do not match', 'error'); return; }
 
             submitBtn.disabled = true;
             submitBtn.textContent = socialAuthMode === 'register' ? 'Creating...' : 'Signing In...';
@@ -1353,7 +1435,7 @@
                     body: JSON.stringify({ handle, password, service_url: serviceUrl })
                 });
                 const data = await resp.json();
-                if (!resp.ok) return alert(data.error || 'Could not sign in');
+                if (!resp.ok) { showToast(data.error || 'Could not sign in', 'error'); return; }
                 document.getElementById('socialSignInPasswordInput').value = '';
                 document.getElementById('socialSignInPasswordConfirmInput').value = '';
                 closeSocialSignInModal();
@@ -1456,10 +1538,10 @@
                 const resp = await fetch(`/games/${gameId}/launch`, { method: 'POST' });
                 const data = await resp.json();
                 if (data.error) {
-                    alert('Launch failed: ' + data.error);
+                    showToast('Launch failed: ' + data.error, 'error');
                 }
             } catch(e) {
-                alert('Launch failed: ' + e.message);
+                showToast('Launch failed: ' + e.message, 'error');
             }
         }
 
@@ -1473,7 +1555,7 @@
                 console.log('Sync results:', data);
                 location.reload();
             } catch(e) {
-                alert('Sync failed: ' + e.message);
+                showToast('Sync failed: ' + e.message, 'error');
             } finally {
                 btn.textContent = 'Sync All';
                 btn.disabled = false;
@@ -1495,7 +1577,7 @@
                     btn.disabled = false;
                 }
             } catch(e) {
-                alert('Enrich failed: ' + e.message);
+                showToast('Enrich failed: ' + e.message, 'error');
                 btn.disabled = false;
                 btn.textContent = '🧠 Enrich All';
             }
@@ -1603,7 +1685,7 @@
             const title = document.getElementById('gameTitle').value.trim();
             const platform = document.getElementById('gamePlatform').value;
             const genre = document.getElementById('gameGenre').value.trim();
-            if (!title) return alert('Title is required');
+            if (!title) { showToast('Title is required', 'error'); return; }
 
             const resp = await fetch('/games/add', {
                 method: 'POST',
@@ -1615,7 +1697,7 @@
                 closeAddModal();
                 location.reload();
             } else {
-                alert('Failed to add game');
+                showToast('Failed to add game', 'error');
             }
         }
     </script>

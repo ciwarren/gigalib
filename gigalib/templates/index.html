@@ -65,18 +65,6 @@
         max-width: 260px;
     }
 
-    .companion-title-stack .tts-status {
-        font-size: 0.68rem;
-        color: var(--text-secondary);
-        margin: 0.1rem 0 0;
-        line-height: 1.25;
-        min-height: 0.85rem;
-    }
-
-    .companion-title-stack .tts-status.tts-status-error {
-        color: #ff8686;
-    }
-
     .ttsToggleBtn {
         display: inline-flex;
         align-items: center;
@@ -601,7 +589,6 @@
                             <button class="btn btn-secondary btn-compact" id="newChatBtn" onclick="startNewConversation()">New Session</button>
                             <button class="btn btn-secondary btn-compact" id="shareChatBtn" onclick="shareConversation()" title="Copy transcript as markdown">Share</button>
                         </div>
-                        <div class="tts-status" id="ttsStatus" aria-live="polite">Initialising voices…</div>
                     </div>
                 </div>
                 <div class="companion-tabs">
@@ -974,7 +961,7 @@
             body: JSON.stringify({ body })
         });
         const data = await resp.json();
-        if (!resp.ok) return alert(data.error || 'Could not send message');
+        if (!resp.ok) { showToast(data.error || 'Could not send message', 'error'); return; }
         input.value = '';
         await loadRailMessages();
         if (typeof refreshSocialNotifications === 'function') {
@@ -1112,7 +1099,7 @@
             body: JSON.stringify({ handle })
         });
         const data = await resp.json();
-        if (!resp.ok) return alert(data.error || 'Could not send request');
+        if (!resp.ok) { showToast(data.error || 'Could not send request', 'error'); return; }
         await loadSocialRequests();
     }
 
@@ -1150,7 +1137,7 @@
     async function respondFriendRequest(requestId, action) {
         const resp = await fetch(`/api/social/friend-requests/${requestId}/${action}`, { method: 'POST' });
         const data = await resp.json();
-        if (!resp.ok) return alert(data.error || 'Could not update request');
+        if (!resp.ok) { showToast(data.error || 'Could not update request', 'error'); return; }
         await loadSocialRail();
         if (typeof checkFriendRequestNotifications === 'function') await checkFriendRequestNotifications();
     }
@@ -1285,15 +1272,18 @@
 
         function setStatus(msg, isError) {
             const el = getStatus();
-            if (!el) return;
-            el.textContent = msg;
-            el.classList.toggle('tts-status-error', !!isError);
+            if (el) {
+                el.textContent = msg;
+                el.classList.toggle('tts-status-error', !!isError);
+            }
+            if (isError && msg && typeof window.showToast === 'function') {
+                window.showToast(msg, 'error');
+            }
         }
 
         function describeState() {
             if (!configured) return 'Kokoro not ready — model files missing.';
-            const eng = enabled ? 'On' : 'Off';
-            return `${eng} • voice: ${preferredVoice}`;
+            return enabled ? 'On' : 'Off';
         }
 
         function stripForSpeech(text) {
@@ -1321,7 +1311,11 @@
                 btn.title = 'Kokoro model files not found in instance/kokoro/';
                 if (lbl) lbl.textContent = 'Speak: n/a';
                 if (sel) sel.disabled = true;
-                setStatus(describeState(), true);
+                // Deliberately not toasting: this is a persistent config state
+                // (surfaced by the disabled button + tooltip), not a runtime
+                // error. Also avoids a false-positive toast on first render
+                // before /api/tts/voices resolves.
+                setStatus(describeState(), false);
                 return;
             }
             btn.disabled = false;
@@ -1632,7 +1626,7 @@
                 stream = await navigator.mediaDevices.getUserMedia({ audio: true });
             } catch (e) {
                 console.warn('getUserMedia failed', e);
-                alert('Could not access microphone: ' + (e && e.message || e));
+                showToast('Could not access microphone: ' + (e && e.message || e), 'error');
                 return;
             }
             const mimeType = pickMimeType();
@@ -1643,7 +1637,7 @@
             } catch (e) {
                 console.warn('MediaRecorder init failed', e);
                 stream.getTracks().forEach(t => t.stop());
-                alert('Recorder failed: ' + (e && e.message || e));
+                showToast('Recorder failed: ' + (e && e.message || e), 'error');
                 return;
             }
             chunks = [];
@@ -1680,7 +1674,7 @@
                     }
                 } catch (e) {
                     console.warn('STT failed', e);
-                    alert('Speech recognition failed: ' + (e && e.message || e));
+                    showToast('Speech recognition failed: ' + (e && e.message || e), 'error');
                 } finally {
                     b.disabled = false;
                     if (inp) inp.placeholder = oldPh;
@@ -1842,7 +1836,9 @@
             });
             const data = await resp.json();
             if (!resp.ok || !data.ok) {
-                meta.textContent = 'Update failed: ' + (data.error || 'unknown error');
+                const msg = 'Update failed: ' + (data.error || 'unknown error');
+                meta.textContent = msg;
+                if (typeof window.showToast === 'function') window.showToast(msg, 'error');
                 btn.textContent = originalLabel;
                 btn.disabled = false;
                 btn.dataset.busy = '';
@@ -1868,7 +1864,9 @@
             };
             waitForServer();
         } catch (e) {
-            meta.textContent = 'Update failed: ' + e.message;
+            const msg = 'Update failed: ' + e.message;
+            meta.textContent = msg;
+            if (typeof window.showToast === 'function') window.showToast(msg, 'error');
             btn.textContent = originalLabel;
             btn.disabled = false;
             btn.dataset.busy = '';
