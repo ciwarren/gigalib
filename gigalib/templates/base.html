@@ -600,9 +600,11 @@
             display: flex;
             gap: 0.5rem;
             background: rgba(11, 19, 29, 0.98);
+            align-items: flex-end;   /* keep Send/mic anchored while textarea grows */
         }
 
-        .chat-input-area input {
+        .chat-input-area input,
+        .chat-input-area textarea {
             flex: 1;
             padding: 0.6rem 1rem;
             border-radius: 10px;
@@ -610,10 +612,20 @@
             background: rgba(18, 29, 42, 0.98);
             color: var(--text-primary);
             font-size: 0.85rem;
+            font-family: inherit;
             outline: none;
         }
 
-        .chat-input-area input:focus {
+        .chat-input-area textarea {
+            resize: none;            /* auto-grown via JS instead of manual handle */
+            min-height: 42px;
+            max-height: 220px;       /* about 10 lines before internal scroll kicks in */
+            line-height: 1.35;
+            overflow-y: auto;
+        }
+
+        .chat-input-area input:focus,
+        .chat-input-area textarea:focus {
             border-color: rgba(83, 247, 125, 0.45);
             box-shadow: 0 0 0 3px rgba(83, 247, 125, 0.10);
         }

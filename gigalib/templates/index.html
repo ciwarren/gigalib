@@ -14,6 +14,17 @@
         gap: 0.28rem;
         justify-items: start;
         text-align: left;
+        min-width: 0;   /* let grid children shrink instead of overflowing */
+        max-width: 100%;
+    }
+
+    /* Model subtitle (e.g. "Gemini 3.5 Flash") never wraps to a second
+       line — it just ellipsises if the companion panel is too narrow. */
+    .companion-title-stack .assistant-meta {
+        white-space: nowrap;
+        overflow: hidden;
+        text-overflow: ellipsis;
+        max-width: 100%;
     }
 
     .companion-title-stack .assistant-actions {
@@ -47,6 +58,11 @@
     .companion-title-stack .assistant-actions select.btn-compact {
         padding-top: 0;
         padding-bottom: 0;
+        /* Grow to fill the remaining row width so voice descriptions like
+           "American female · warm" don't get truncated with an ellipsis. */
+        flex: 1 1 180px;
+        min-width: 160px;
+        max-width: 260px;
     }
 
     .companion-title-stack .tts-status {
@@ -577,7 +593,7 @@
                                 </span>
                                 <span class="tts-label" id="ttsToggleLabel">Speak: off</span>
                             </button>
-                            <select class="control-select btn-compact" id="ttsVoiceSelect" onchange="onTtsVoiceChange(this.value)" title="Voice" aria-label="AI voice" style="max-width:160px;">
+                            <select class="control-select btn-compact" id="ttsVoiceSelect" onchange="onTtsVoiceChange(this.value)" title="Voice" aria-label="AI voice">
                                 <option value="">Default voice</option>
                             </select>
                         </div>
@@ -609,8 +625,10 @@
                             <line x1="8" y1="22" x2="16" y2="22"></line>
                         </svg>
                     </button>
-                    <input type="text" id="chatInput" placeholder="e.g. Something chill for 2 hours..."
-                           onkeypress="if(event.key==='Enter')sendMessage()">
+                    <textarea id="chatInput" rows="2"
+                              placeholder="e.g. Something chill for 2 hours..."
+                              onkeydown="if(event.key==='Enter' && !event.shiftKey){event.preventDefault();sendMessage();}"
+                              oninput="autoGrowChatInput(this)"></textarea>
                     <button onclick="sendMessage()">Send</button>
                 </div>
             </div>
@@ -1678,6 +1696,15 @@
     })();
 
     function toggleMic() { GigaSTT.toggle(); }
+
+    // Auto-grow the chat textarea from its 2-row default up to its CSS
+    // max-height. Kept inline (rather than a resize handle) so the layout
+    // stays keyboard/paste-driven without needing a mouse drag.
+    function autoGrowChatInput(el) {
+        if (!el) return;
+        el.style.height = 'auto';
+        el.style.height = Math.min(el.scrollHeight, 220) + 'px';
+    }
     GigaSTT.init();
 
     // AI Chat
@@ -1698,6 +1725,8 @@
         chatHistory.push({ role: 'user', content: message });
 
         input.value = '';
+        // Reset textarea height back to its 2-row default after clearing.
+        if (typeof autoGrowChatInput === 'function') autoGrowChatInput(input);
         chatMessages.scrollTop = chatMessages.scrollHeight;
 
         // Show typing indicator
