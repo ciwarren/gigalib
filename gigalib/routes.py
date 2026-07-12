@@ -27,6 +27,7 @@ from gigalib.social import (SocialServiceError, accept_remote_friend_request,
                             social_overview, sync_local_social_snapshot,
                             sync_remote_social_snapshot,
                             update_privacy_settings, update_remote_presence)
+from gigalib import updater
 
 main_bp = Blueprint("main", __name__)
 
@@ -813,3 +814,26 @@ def assistant():
     db.session.commit()
 
     return jsonify({"response": response, "conversation_id": conversation.id})
+
+
+@main_bp.route("/api/updates/check")
+def api_updates_check():
+    # Always refresh from local git first so we don't return stale nulls
+    # if the background fetch job hasn't run yet in this process.
+    try:
+        updater.refresh_status_from_local()
+    except Exception:
+        pass
+    # Kick off a background fetch if the last one is stale.
+    updater.maybe_background_fetch()
+    status = updater.get_status()
+    return jsonify(status)
+
+
+@main_bp.route("/api/updates/apply", methods=["POST"])
+def api_updates_apply():
+    data = request.get_json(silent=True) or {}
+    auto_restart = bool(data.get("auto_restart", True))
+    result = updater.apply_update(auto_restart=auto_restart)
+    status_code = 200 if result.get("ok") else 400
+    return jsonify(result), status_code

@@ -327,7 +327,92 @@
         border-color: rgba(83, 247, 125, 0.24);
         background: rgba(19, 45, 30, 0.78);
     }
+
+    .update-banner {
+        display: none;
+        max-width: 1400px;
+        margin: 1rem auto 0;
+        padding: 0.85rem 1rem;
+        border: 1px solid rgba(255, 212, 71, 0.45);
+        border-radius: 14px;
+        background: linear-gradient(180deg, rgba(46, 40, 15, 0.9), rgba(28, 24, 10, 0.9));
+        box-shadow: var(--shadow);
+        gap: 0.9rem;
+        align-items: center;
+        justify-content: space-between;
+    }
+
+    .update-banner.visible { display: flex; flex-wrap: wrap; }
+
+    .update-banner .update-text {
+        display: grid;
+        gap: 0.2rem;
+        min-width: 220px;
+    }
+
+    .update-banner .update-title {
+        color: var(--accent-3);
+        font-weight: 700;
+        letter-spacing: 0.02em;
+    }
+
+    .update-banner .update-meta {
+        color: var(--text-secondary);
+        font-size: 0.78rem;
+    }
+
+    .update-banner .update-actions {
+        display: flex;
+        gap: 0.5rem;
+        flex-wrap: wrap;
+    }
+
+    .update-banner details.update-log {
+        flex: 1 1 100%;
+        margin-top: 0.35rem;
+    }
+
+    .update-banner details.update-log summary {
+        cursor: pointer;
+        color: var(--text-secondary);
+        font-size: 0.78rem;
+        list-style: none;
+    }
+
+    .update-banner details.update-log summary::-webkit-details-marker { display: none; }
+    .update-banner details.update-log summary::after { content: ' [+]'; }
+    .update-banner details.update-log[open] summary::after { content: ' [-]'; }
+
+    .update-banner ul.update-commit-list {
+        margin: 0.5rem 0 0;
+        padding-left: 1.1rem;
+        color: var(--text-primary);
+        font-size: 0.8rem;
+        max-height: 180px;
+        overflow-y: auto;
+    }
+
+    .update-banner ul.update-commit-list li { margin-bottom: 0.2rem; }
+    .update-banner ul.update-commit-list code {
+        color: var(--accent-2);
+        font-size: 0.75rem;
+    }
 </style>
+
+<div class="update-banner" id="updateBanner" role="status" aria-live="polite">
+    <div class="update-text">
+        <span class="update-title" id="updateBannerTitle">Update available</span>
+        <span class="update-meta" id="updateBannerMeta"></span>
+    </div>
+    <div class="update-actions">
+        <button class="btn btn-primary btn-compact" id="updateApplyBtn" type="button" onclick="applyUpdate()">Update now</button>
+        <button class="btn btn-secondary btn-compact" type="button" onclick="dismissUpdateBanner()">Later</button>
+    </div>
+    <details class="update-log" id="updateCommitsWrap">
+        <summary>What's new</summary>
+        <ul class="update-commit-list" id="updateCommitList"></ul>
+    </details>
+</div>
 
 <div class="container">
     <div class="stat-grid">
@@ -1131,5 +1216,116 @@
             .replace(/`([^`]+)`/g, '<code>$1</code>')
             .replace(/\n/g, '<br>');
     }
+
+    // ---- Self-update banner ---------------------------------------------
+    const UPDATE_POLL_MS = 5 * 60 * 1000;
+    let updateDismissedSha = sessionStorage.getItem('gigalibUpdateDismissedSha') || '';
+
+    function escapeHtml(s) {
+        return String(s == null ? '' : s)
+            .replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
+            .replace(/"/g, '&quot;').replace(/'/g, '&#39;');
+    }
+
+    let latestUpdateSha = '';
+
+    function renderUpdateBanner(status) {
+        const banner = document.getElementById('updateBanner');
+        if (!banner) return;
+        if (!status || !status.supported || !status.update_available) {
+            banner.classList.remove('visible');
+            return;
+        }
+        latestUpdateSha = status.latest_sha || '';
+        if (updateDismissedSha && updateDismissedSha === latestUpdateSha) {
+            banner.classList.remove('visible');
+            return;
+        }
+        const meta = document.getElementById('updateBannerMeta');
+        const count = status.ahead_by || (status.commits ? status.commits.length : 0);
+        const current = status.current_short || '?';
+        const latest = status.latest_short || '?';
+        meta.textContent = `${count} new commit${count === 1 ? '' : 's'} on origin/main (${current} -> ${latest})`;
+
+        const list = document.getElementById('updateCommitList');
+        const commits = status.commits || [];
+        list.innerHTML = commits.slice(0, 20).map(c =>
+            `<li><code>${escapeHtml(c.short)}</code> ${escapeHtml(c.subject)} <span style="color:var(--text-secondary)">- ${escapeHtml(c.author)}</span></li>`
+        ).join('');
+        document.getElementById('updateCommitsWrap').style.display = commits.length ? '' : 'none';
+        banner.classList.add('visible');
+    }
+
+    async function checkForUpdates() {
+        try {
+            const resp = await fetch('/api/updates/check', { cache: 'no-store' });
+            if (!resp.ok) return;
+            const status = await resp.json();
+            renderUpdateBanner(status);
+        } catch (e) {
+            // network errors are non-fatal; try again next poll
+        }
+    }
+
+    async function applyUpdate() {
+        const btn = document.getElementById('updateApplyBtn');
+        const meta = document.getElementById('updateBannerMeta');
+        if (btn.dataset.busy === '1') return;
+        btn.dataset.busy = '1';
+        const originalLabel = btn.textContent;
+        btn.textContent = 'Updating...';
+        btn.disabled = true;
+        try {
+            const resp = await fetch('/api/updates/apply', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ auto_restart: true })
+            });
+            const data = await resp.json();
+            if (!resp.ok || !data.ok) {
+                meta.textContent = 'Update failed: ' + (data.error || 'unknown error');
+                btn.textContent = originalLabel;
+                btn.disabled = false;
+                btn.dataset.busy = '';
+                return;
+            }
+            meta.textContent = (data.message || 'Update applied.') + ' Reloading soon...';
+            btn.textContent = 'Restarting...';
+            // Poll until the server comes back, then reload.
+            const deadline = Date.now() + 60000;
+            const waitForServer = async () => {
+                while (Date.now() < deadline) {
+                    await new Promise(r => setTimeout(r, 2000));
+                    try {
+                        const r = await fetch('/api/updates/check', { cache: 'no-store' });
+                        if (r.ok) {
+                            location.reload();
+                            return;
+                        }
+                    } catch (_) { /* still restarting */ }
+                }
+                // Fallback reload if we can't detect a comeback.
+                location.reload();
+            };
+            waitForServer();
+        } catch (e) {
+            meta.textContent = 'Update failed: ' + e.message;
+            btn.textContent = originalLabel;
+            btn.disabled = false;
+            btn.dataset.busy = '';
+        }
+    }
+
+    function dismissUpdateBanner() {
+        const banner = document.getElementById('updateBanner');
+        if (latestUpdateSha) {
+            updateDismissedSha = latestUpdateSha;
+            sessionStorage.setItem('gigalibUpdateDismissedSha', latestUpdateSha);
+        }
+        banner.classList.remove('visible');
+    }
+
+    checkForUpdates();
+    setInterval(checkForUpdates, UPDATE_POLL_MS);
 </script>
 {% endblock %}

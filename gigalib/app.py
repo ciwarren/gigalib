@@ -194,6 +194,22 @@ def create_app():
             id="startup_sync_enrich",
             replace_existing=True,
         )
+        from gigalib import updater as _updater
+
+        scheduler.add_job(
+            _updater.fetch_and_refresh,
+            "interval",
+            minutes=30,
+            id="check_updates",
+            replace_existing=True,
+        )
+        scheduler.add_job(
+            _updater.fetch_and_refresh,
+            "date",
+            run_date=datetime.utcnow(),
+            id="startup_check_updates",
+            replace_existing=True,
+        )
         scheduler.start()
         app.logger.info(
             "Scheduler started: startup sync plus sync+social+enrich every hour"
