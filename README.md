@@ -68,7 +68,13 @@ Edit `.env` with your keys:
 `scripts/setup.ps1` copies `platforms.example.yaml` to `platforms.yaml` on
 first run and auto-appends any Steam / EA / Ubisoft / Xbox install locations
 it finds on your fixed drives. `platforms.yaml` is git-ignored so your local
-paths never dirty the checkout — edit it freely:
+paths never dirty the checkout — edit it freely. The app will refuse to start
+if `platforms.yaml` is missing, so if you skip `setup.ps1` you must copy the
+example manually:
+
+```powershell
+Copy-Item platforms.example.yaml platforms.yaml
+```
 
 ```yaml
 steam:
