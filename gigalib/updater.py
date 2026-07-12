@@ -245,16 +245,12 @@ def _spawn_detached_restart(delay_seconds: int = 3) -> bool:
         f"$r = schtasks /run /tn '{TASK_NAME}' 2>&1; L (\"run: \" + ($r -join ' | ')); "
         f"L 'helper done'"
     )
-    DETACHED_PROCESS = 0x00000008
-    CREATE_NEW_PROCESS_GROUP = 0x00000200
+    # Use only CREATE_NO_WINDOW + CREATE_BREAKAWAY_FROM_JOB. Combining
+    # DETACHED_PROCESS or CREATE_NEW_PROCESS_GROUP with CREATE_NO_WINDOW
+    # causes powershell to fail silently to start on some Windows builds.
     CREATE_NO_WINDOW = 0x08000000
     CREATE_BREAKAWAY_FROM_JOB = 0x01000000
-    flags = (
-        DETACHED_PROCESS
-        | CREATE_NEW_PROCESS_GROUP
-        | CREATE_NO_WINDOW
-        | CREATE_BREAKAWAY_FROM_JOB
-    )
+    flags = CREATE_NO_WINDOW | CREATE_BREAKAWAY_FROM_JOB
 
     def _spawn(creationflags: int) -> bool:
         try:
@@ -272,7 +268,6 @@ def _spawn_detached_restart(delay_seconds: int = 3) -> bool:
                 stdout=subprocess.DEVNULL,
                 stderr=subprocess.DEVNULL,
                 creationflags=creationflags,
-                close_fds=True,
             )
             return True
         except Exception:
@@ -282,7 +277,7 @@ def _spawn_detached_restart(delay_seconds: int = 3) -> bool:
     # ERROR_ACCESS_DENIED. Retry without the breakaway flag so we at least try.
     if _spawn(flags):
         return True
-    return _spawn(flags & ~CREATE_BREAKAWAY_FROM_JOB)
+    return _spawn(CREATE_NO_WINDOW)
 
 
 def _run_uv_sync() -> tuple[bool, str]:
