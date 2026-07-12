@@ -223,17 +223,27 @@ def _spawn_detached_restart(delay_seconds: int = 3) -> bool:
     if sys.platform != "win32":
         return False
     app_port = int(os.environ.get("GIGALIB_PORT", "5000"))
+    log_path = os.path.join(REPO_ROOT, "instance", "updater-restart.log")
+    os.makedirs(os.path.dirname(log_path), exist_ok=True)
     # PowerShell script: end task, poll until port is free (max 20s), then run.
+    ps_log = log_path.replace("'", "''")
     script = (
+        f"$ErrorActionPreference='Continue'; "
+        f"$log='{ps_log}'; "
+        f"function L($m) {{ Add-Content -Path $log -Value ((Get-Date -Format o) + ' ' + $m) }}; "
+        f"L 'helper started, waiting {int(delay_seconds)}s'; "
         f"Start-Sleep -Seconds {int(delay_seconds)}; "
-        f"schtasks /end /tn '{TASK_NAME}' | Out-Null; "
+        f"L 'ending task'; "
+        f"$e = schtasks /end /tn '{TASK_NAME}' 2>&1; L (\"end: \" + ($e -join ' | ')); "
         f"$deadline = (Get-Date).AddSeconds(20); "
         f"while ((Get-Date) -lt $deadline) {{ "
         f"  $listener = Get-NetTCPConnection -LocalPort {app_port} -State Listen -ErrorAction SilentlyContinue; "
-        f"  if (-not $listener) {{ break }}; "
+        f"  if (-not $listener) {{ L 'port free'; break }}; "
         f"  Start-Sleep -Milliseconds 500 "
         f"}}; "
-        f"schtasks /run /tn '{TASK_NAME}' | Out-Null"
+        f"L 'running task'; "
+        f"$r = schtasks /run /tn '{TASK_NAME}' 2>&1; L (\"run: \" + ($r -join ' | ')); "
+        f"L 'helper done'"
     )
     DETACHED_PROCESS = 0x00000008
     CREATE_NEW_PROCESS_GROUP = 0x00000200
