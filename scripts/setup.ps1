@@ -208,7 +208,66 @@ if ($LASTEXITCODE -eq 0) {
 }
 
 # ─────────────────────────────────────────────────────────────────────────────
-Write-Step 6 "Installing app startup task"
+Write-Step 6 "Installing voice models (Kokoro TTS + Whisper STT)"
+
+Write-Host "  GigaLib's AI companion can speak (Kokoro TTS) and listen"      -ForegroundColor White
+Write-Host "  (faster-whisper STT), both running fully locally — no cloud,"  -ForegroundColor White
+Write-Host "  no quotas. Total download is about 480 MB and is idempotent"   -ForegroundColor White
+Write-Host "  (skips files that are already present)."                       -ForegroundColor White
+Write-Host ""
+Write-Host "    Kokoro TTS model  ~ 337 MB  -> instance\kokoro\"             -ForegroundColor DarkGray
+Write-Host "    Whisper STT model ~ 140 MB  -> instance\whisper\ (base)"     -ForegroundColor DarkGray
+Write-Host ""
+
+$instanceDir = Join-Path (Get-Location) "instance"
+$kokoroDir   = Join-Path $instanceDir "kokoro"
+$whisperDir  = Join-Path $instanceDir "whisper"
+New-Item -ItemType Directory -Force -Path $kokoroDir  | Out-Null
+New-Item -ItemType Directory -Force -Path $whisperDir | Out-Null
+
+$kokoroFiles = @(
+    @{ Name = "kokoro-v1.0.onnx"; Url = "https://github.com/thewh1teagle/kokoro-onnx/releases/download/model-files-v1.0/kokoro-v1.0.onnx" },
+    @{ Name = "voices-v1.0.bin"; Url = "https://github.com/thewh1teagle/kokoro-onnx/releases/download/model-files-v1.0/voices-v1.0.bin" }
+)
+foreach ($f in $kokoroFiles) {
+    $dest = Join-Path $kokoroDir $f.Name
+    if (Test-Path $dest) {
+        Write-Ok "Kokoro: $($f.Name) already present"
+        continue
+    }
+    Write-Host "    Downloading $($f.Name)..." -ForegroundColor DarkGray
+    try {
+        # Invoke-WebRequest streams to disk with a progress bar. Basic
+        # parsing avoids the legacy IE COM engine.
+        Invoke-WebRequest -Uri $f.Url -OutFile $dest -UseBasicParsing
+        Write-Ok "Kokoro: $($f.Name) downloaded"
+    } catch {
+        Write-Err "Kokoro download failed for $($f.Name): $_"
+        if (Test-Path $dest) { Remove-Item $dest -Force -ErrorAction SilentlyContinue }
+    }
+}
+
+Write-Host "    Warming faster-whisper (base) — first run downloads the model..." -ForegroundColor DarkGray
+$whisperWarm = @"
+import os, sys
+os.environ.setdefault('WHISPER_CACHE_DIR', r'$whisperDir')
+try:
+    from faster_whisper import WhisperModel
+    WhisperModel('base', device='cpu', compute_type='int8', download_root=r'$whisperDir')
+    print('whisper OK')
+except Exception as exc:
+    print('whisper FAIL:', exc, file=sys.stderr)
+    sys.exit(1)
+"@
+$whisperResult = $whisperWarm | uv run python - 2>&1
+if ($LASTEXITCODE -eq 0) {
+    Write-Ok "Whisper: base model ready"
+} else {
+    Write-Err "Whisper warm-up failed: $whisperResult"
+}
+
+# ─────────────────────────────────────────────────────────────────────────────
+Write-Step 7 "Installing app startup task"
 
 $installTasks = Read-Host "  Install Windows startup task for GigaLib? (y/n)"
 if ($installTasks -eq "y") {
@@ -221,7 +280,7 @@ if ($installTasks -eq "y") {
 }
 
 # ─────────────────────────────────────────────────────────────────────────────
-Write-Step 7 "Done!"
+Write-Step 8 "Done!"
 
 Write-Host ""
 Write-Host "  GigaLib is ready to go!" -ForegroundColor Green

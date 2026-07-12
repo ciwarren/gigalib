@@ -111,6 +111,20 @@ uv run python scripts/serve.py --host 0.0.0.0 --port 8080
 5. **Use Social** — Sign in with a handle, sync your privacy-filtered snapshot, add friends, filter by shared libraries, use party mode, see online friends, and send messages
 6. **Review history** — Open the History page to revisit past assistant conversations
 
+### Voice: Kokoro TTS + faster-whisper STT
+
+The AI companion panel has an optional Speak toggle (Kokoro-82M text-to-speech) and a microphone button (faster-whisper speech-to-text). Both run **fully locally** — no cloud, no quota — and are cross-vendor (CPU by default, ONNX Runtime / CUDA optional).
+
+- **TTS (Kokoro)** — Drop the model files under `instance/kokoro/`:
+  - [`kokoro-v1.0.onnx`](https://github.com/thewh1teagle/kokoro-onnx/releases/download/model-files-v1.0/kokoro-v1.0.onnx) (~310 MB)
+  - [`voices-v1.0.bin`](https://github.com/thewh1teagle/kokoro-onnx/releases/download/model-files-v1.0/voices-v1.0.bin) (~27 MB)
+
+  Override paths with `KOKORO_MODEL_PATH` / `KOKORO_VOICES_PATH` if you want them elsewhere.
+
+- **STT (faster-whisper)** — Model auto-downloads on first mic-click into `instance/whisper/` (`base` by default, ~140 MB). Override with `WHISPER_MODEL` (`tiny|base|small|medium|large-v3`), `WHISPER_DEVICE` (`cpu|cuda|auto`), `WHISPER_COMPUTE_TYPE` (`int8|int8_float16|float16|float32`), or `WHISPER_CACHE_DIR`.
+
+The mic button is hidden if `faster-whisper` isn't importable, and the Speak toggle is disabled if the Kokoro model files aren't present.
+
 ## Social API
 
 The local GigaLib app talks to a separate lightweight Flask service for account handles, friend requests, library snapshots, online presence, and messages. The local app keeps your full game database private; only the privacy-filtered snapshot you sync is sent to the service.

@@ -5,7 +5,7 @@ import threading
 import uuid
 from datetime import datetime
 
-from flask import Blueprint, current_app, jsonify, render_template, request
+from flask import Blueprint, Response, current_app, jsonify, render_template, request
 
 from gigalib import db
 from gigalib.assistant import ask_assistant
@@ -28,6 +28,8 @@ from gigalib.social import (SocialServiceError, accept_remote_friend_request,
                             sync_remote_social_snapshot,
                             update_privacy_settings, update_remote_presence)
 from gigalib import updater
+from gigalib import tts as tts_service
+from gigalib import stt as stt_service
 
 main_bp = Blueprint("main", __name__)
 
@@ -379,13 +381,19 @@ def index():
     platform_list = [p[0] for p in platforms]
     stats = _library_stats(all_games)
     _queue_app_open_sync()
-    return render_template(
+    html = render_template(
         "index.html",
         games=games,
         platforms=platform_list,
         stats=stats,
         canonical_title=canonical_title,
     )
+    # Local single-user app — avoid stale HTML/JS from browser cache so
+    # template edits show up immediately on refresh.
+    resp = Response(html, mimetype="text/html")
+    resp.headers["Cache-Control"] = "no-store, must-revalidate"
+    resp.headers["Pragma"] = "no-cache"
+    return resp
 
 
 @main_bp.route("/conversations")
@@ -814,6 +822,69 @@ def assistant():
     db.session.commit()
 
     return jsonify({"response": response, "conversation_id": conversation.id})
+
+
+@main_bp.route("/api/tts/voices")
+def api_tts_voices():
+    """List Kokoro TTS voices available locally."""
+    return jsonify({
+        "configured": tts_service.is_configured(),
+        "model": tts_service.TTS_MODEL_DEFAULT,
+        "voices": tts_service.list_voices(),
+    })
+
+
+@main_bp.route("/api/tts", methods=["POST"])
+def api_tts():
+    """Synthesize speech from text using Kokoro and return audio/wav bytes."""
+    data = request.get_json(silent=True) or {}
+    text = data.get("text", "")
+    voice = data.get("voice") or "af_heart"
+    style = data.get("style")
+    try:
+        wav = tts_service.synthesize(text, voice=voice, style=style)
+    except tts_service.TTSError as exc:
+        return jsonify({"error": str(exc)}), 400
+    except Exception as exc:  # noqa: BLE001
+        return jsonify({"error": f"tts failed: {exc}"}), 500
+    return Response(
+        wav,
+        mimetype="audio/wav",
+        headers={
+            "Content-Length": str(len(wav)),
+            "Cache-Control": "no-store",
+        },
+    )
+
+
+@main_bp.route("/api/stt/config")
+def api_stt_config():
+    """Tell the UI whether the mic button should be shown/enabled."""
+    return jsonify({
+        "configured": stt_service.is_configured(),
+        "model": stt_service.STT_MODEL_DEFAULT,
+    })
+
+
+@main_bp.route("/api/stt", methods=["POST"])
+def api_stt():
+    """Transcribe a short audio clip uploaded via multipart form.
+
+    Expects a field named ``audio`` (Blob from MediaRecorder). Optional
+    ``mime_type`` form field overrides the browser-provided type.
+    """
+    audio_file = request.files.get("audio")
+    if audio_file is None:
+        return jsonify({"error": "missing audio file"}), 400
+    mime_type = request.form.get("mime_type") or audio_file.mimetype or "audio/webm"
+    audio_bytes = audio_file.read()
+    try:
+        transcript = stt_service.transcribe(audio_bytes, mime_type=mime_type)
+    except stt_service.STTError as exc:
+        return jsonify({"error": str(exc)}), 400
+    except Exception as exc:  # noqa: BLE001
+        return jsonify({"error": f"stt failed: {exc}"}), 500
+    return jsonify({"transcript": transcript})
 
 
 @main_bp.route("/api/updates/check")

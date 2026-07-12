@@ -18,12 +18,74 @@
 
     .companion-title-stack .assistant-actions {
         display: flex;
+        flex-direction: column;
+        align-items: stretch;
+        gap: 0.35rem;
+        width: 100%;
+        margin-top: 0.15rem;
+        /* Press Start 2P h3 has a chunky left side-bearing, so the button
+           borders would otherwise look shifted left of the title. */
+        padding-left: 3px;
+    }
+
+    .companion-title-stack .assistant-actions .action-row {
+        display: flex;
         flex-wrap: wrap;
+        align-items: center;
         gap: 0.4rem;
     }
 
     .companion-title-stack .assistant-actions .btn-compact {
         margin-left: 0;
+        height: 28px;
+        line-height: 1;
+        display: inline-flex;
+        align-items: center;
+        box-sizing: border-box;
+    }
+
+    .companion-title-stack .assistant-actions select.btn-compact {
+        padding-top: 0;
+        padding-bottom: 0;
+    }
+
+    .companion-title-stack .tts-status {
+        font-size: 0.68rem;
+        color: var(--text-secondary);
+        margin: 0.1rem 0 0;
+        line-height: 1.25;
+        min-height: 0.85rem;
+    }
+
+    .companion-title-stack .tts-status.tts-status-error {
+        color: #ff8686;
+    }
+
+    .ttsToggleBtn {
+        display: inline-flex;
+        align-items: center;
+        gap: 0.35rem;
+    }
+
+    .ttsToggleBtn .tts-icon {
+        display: inline-flex;
+        line-height: 0;
+    }
+
+    .ttsToggleBtn .tts-icon-on { display: none; }
+    .ttsToggleBtn .tts-icon-off { display: inline; }
+
+    .ttsToggleBtn[aria-pressed="true"] {
+        border-color: rgba(83, 247, 125, 0.45);
+        color: #04110a;
+        background: linear-gradient(180deg, #79ff9d, var(--accent));
+    }
+
+    .ttsToggleBtn[aria-pressed="true"] .tts-icon-on { display: inline; }
+    .ttsToggleBtn[aria-pressed="true"] .tts-icon-off { display: none; }
+
+    .ttsToggleBtn.speaking {
+        box-shadow: 0 0 0 2px rgba(83, 247, 125, 0.35);
     }
 
     .companion-tab {
@@ -507,8 +569,23 @@
                     <h3>GigaLib</h3>
                     <div class="assistant-meta" id="companionMeta">Gemini 3.5 Flash</div>
                     <div class="assistant-actions" id="assistantActions">
-                        <button class="btn btn-secondary btn-compact" id="newChatBtn" onclick="startNewConversation()">New Session</button>
-                        <button class="btn btn-secondary btn-compact" id="shareChatBtn" onclick="shareConversation()" title="Copy transcript as markdown">Share</button>
+                        <div class="action-row">
+                            <button class="btn btn-secondary btn-compact ttsToggleBtn" id="ttsToggleBtn" type="button" onclick="toggleTts()" aria-pressed="false" title="Read AI replies aloud">
+                                <span class="tts-icon" aria-hidden="true">
+                                    <svg class="tts-icon-on" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polygon points="11 5 6 9 2 9 2 15 6 15 11 19 11 5"></polygon><path d="M15.54 8.46a5 5 0 0 1 0 7.07"></path><path d="M19.07 4.93a10 10 0 0 1 0 14.14"></path></svg>
+                                    <svg class="tts-icon-off" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polygon points="11 5 6 9 2 9 2 15 6 15 11 19 11 5"></polygon><line x1="23" y1="9" x2="17" y2="15"></line><line x1="17" y1="9" x2="23" y2="15"></line></svg>
+                                </span>
+                                <span class="tts-label" id="ttsToggleLabel">Speak: off</span>
+                            </button>
+                            <select class="control-select btn-compact" id="ttsVoiceSelect" onchange="onTtsVoiceChange(this.value)" title="Voice" aria-label="AI voice" style="max-width:160px;">
+                                <option value="">Default voice</option>
+                            </select>
+                        </div>
+                        <div class="action-row">
+                            <button class="btn btn-secondary btn-compact" id="newChatBtn" onclick="startNewConversation()">New Session</button>
+                            <button class="btn btn-secondary btn-compact" id="shareChatBtn" onclick="shareConversation()" title="Copy transcript as markdown">Share</button>
+                        </div>
+                        <div class="tts-status" id="ttsStatus" aria-live="polite">Initialising voices…</div>
                     </div>
                 </div>
                 <div class="companion-tabs">
@@ -520,6 +597,18 @@
             <div class="companion-view active" id="aiCompanionView">
                 <div class="chat-messages" id="chatMessages"></div>
                 <div class="chat-input-area">
+                    <button type="button" class="mic-btn" id="micBtn" onclick="toggleMic()"
+                            title="Record voice (transcribe)" aria-label="Record voice"
+                            style="display:none;">
+                        <svg width="16" height="16" viewBox="0 0 24 24" fill="none"
+                             stroke="currentColor" stroke-width="2" stroke-linecap="round"
+                             stroke-linejoin="round" aria-hidden="true">
+                            <rect x="9" y="3" width="6" height="12" rx="3"></rect>
+                            <path d="M5 11a7 7 0 0 0 14 0"></path>
+                            <line x1="12" y1="18" x2="12" y2="22"></line>
+                            <line x1="8" y1="22" x2="16" y2="22"></line>
+                        </svg>
+                    </button>
                     <input type="text" id="chatInput" placeholder="e.g. Something chill for 2 hours..."
                            onkeypress="if(event.key==='Enter')sendMessage()">
                     <button onclick="sendMessage()">Send</button>
@@ -1092,6 +1181,7 @@
         conversationId = '';
         localStorage.removeItem('gigalibConversationId');
         chatHistory = [];
+        if (window.GigaTTS) GigaTTS.stop();
         renderDefaultAssistantMessage();
     }
 
@@ -1157,6 +1247,439 @@
         renderDefaultAssistantMessage();
     }
 
+    // Text-to-speech — Gemini TTS via /api/tts (server-side, high-quality).
+    // Sticky per-user via localStorage.
+    const GigaTTS = (function () {
+        const STORE_ENABLED = 'gigalibTtsEnabled';
+        const STORE_VOICE = 'gigalibTtsVoice';
+        let enabled = localStorage.getItem(STORE_ENABLED) === '1';
+        let preferredVoice = localStorage.getItem(STORE_VOICE) || 'af_heart';
+        let voices = [];             // [{name, description, lang}]
+        let configured = false;
+        let currentAudio = null;
+        let currentAudioURL = null;
+        let cancelToken = 0;
+
+        function getButton() { return document.getElementById('ttsToggleBtn'); }
+        function getLabel() { return document.getElementById('ttsToggleLabel'); }
+        function getSelect() { return document.getElementById('ttsVoiceSelect'); }
+        function getStatus() { return document.getElementById('ttsStatus'); }
+
+        function setStatus(msg, isError) {
+            const el = getStatus();
+            if (!el) return;
+            el.textContent = msg;
+            el.classList.toggle('tts-status-error', !!isError);
+        }
+
+        function describeState() {
+            if (!configured) return 'Kokoro not ready — model files missing.';
+            const eng = enabled ? 'On' : 'Off';
+            return `${eng} • voice: ${preferredVoice}`;
+        }
+
+        function stripForSpeech(text) {
+            if (!text) return '';
+            let s = String(text);
+            s = s.replace(/```[\s\S]*?```/g, ' code block ');
+            s = s.replace(/`([^`]+)`/g, '$1');
+            s = s.replace(/!\[[^\]]*\]\([^)]*\)/g, '');
+            s = s.replace(/\[([^\]]+)\]\([^)]*\)/g, '$1');
+            s = s.replace(/^\s{0,3}#{1,6}\s+/gm, '');
+            s = s.replace(/(\*\*|__|\*|_|~~)/g, '');
+            s = s.replace(/^\s*[-*+]\s+/gm, '');
+            s = s.replace(/<[^>]+>/g, ' ');
+            s = s.replace(/\s+/g, ' ').trim();
+            return s;
+        }
+
+        function refreshUI() {
+            const btn = getButton();
+            const lbl = getLabel();
+            const sel = getSelect();
+            if (!btn) return;
+            if (!configured) {
+                btn.disabled = true;
+                btn.title = 'Kokoro model files not found in instance/kokoro/';
+                if (lbl) lbl.textContent = 'Speak: n/a';
+                if (sel) sel.disabled = true;
+                setStatus(describeState(), true);
+                return;
+            }
+            btn.disabled = false;
+            btn.setAttribute('aria-pressed', enabled ? 'true' : 'false');
+            if (lbl) lbl.textContent = enabled ? 'Speak: on' : 'Speak: off';
+            if (sel) sel.disabled = !enabled;
+            setStatus(describeState(), false);
+        }
+
+        function populateSelect() {
+            const sel = getSelect();
+            if (!sel) return;
+            sel.innerHTML = '';
+            voices.forEach(v => {
+                const opt = document.createElement('option');
+                opt.value = v.name;
+                opt.textContent = `${v.name} — ${v.description}`;
+                sel.appendChild(opt);
+            });
+            // Restore selection; fall back to first voice.
+            const isValid = voices.some(v => v.name === preferredVoice);
+            if (!isValid && voices.length) preferredVoice = voices[0].name;
+            sel.value = preferredVoice;
+        }
+
+        async function loadVoices() {
+            try {
+                const resp = await fetch('/api/tts/voices');
+                if (!resp.ok) throw new Error('HTTP ' + resp.status);
+                const data = await resp.json();
+                configured = !!data.configured;
+                voices = configured ? (data.voices || []) : [];
+            } catch (e) {
+                console.warn('Failed to load Kokoro voices', e);
+                configured = false;
+                voices = [];
+            }
+            populateSelect();
+            refreshUI();
+        }
+
+        // Chunk to ~1400 chars per request so long replies start speaking sooner.
+        function chunkForSpeech(text, maxLen) {
+            const limit = maxLen || 1400;
+            const out = [];
+            const sentences = text.match(/[^.!?\n]+[.!?]?/g) || [text];
+            let buf = '';
+            for (const raw of sentences) {
+                const s = raw.trim();
+                if (!s) continue;
+                if (s.length > limit) {
+                    if (buf) { out.push(buf); buf = ''; }
+                    const parts = s.match(new RegExp(`.{1,${limit}}(\\s|,|;|:|$)`, 'g')) || [s];
+                    parts.forEach(p => { const t = p.trim(); if (t) out.push(t); });
+                    continue;
+                }
+                if ((buf + ' ' + s).trim().length > limit) {
+                    out.push(buf);
+                    buf = s;
+                } else {
+                    buf = buf ? (buf + ' ' + s) : s;
+                }
+            }
+            if (buf) out.push(buf);
+            return out;
+        }
+
+        function stopAudio() {
+            if (currentAudio) {
+                try { currentAudio.pause(); } catch (e) {}
+                currentAudio = null;
+            }
+            if (currentAudioURL) {
+                try { URL.revokeObjectURL(currentAudioURL); } catch (e) {}
+                currentAudioURL = null;
+            }
+        }
+
+        function stop() {
+            cancelToken++;
+            stopAudio();
+            if (currentIndicator) { currentIndicator.remove(); currentIndicator = null; }
+            const btn = getButton();
+            if (btn) btn.classList.remove('speaking');
+        }
+
+        async function speakChunks(chunks, token, targetEl) {
+            const btn = getButton();
+            if (btn) btn.classList.add('speaking');
+            setStatus('Synthesizing… ' + describeState(), false);
+            for (let i = 0; i < chunks.length; i++) {
+                if (token !== cancelToken) return;
+                try {
+                    const resp = await fetch('/api/tts', {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({ text: chunks[i], voice: preferredVoice })
+                    });
+                    if (!resp.ok) {
+                        let msg = 'HTTP ' + resp.status;
+                        try {
+                            const j = await resp.json();
+                            if (j && j.error) msg = j.error;
+                        } catch (e) {}
+                        throw new Error(msg);
+                    }
+                    if (token !== cancelToken) return;
+                    const blob = await resp.blob();
+                    if (token !== cancelToken) return;
+                    await playBlob(blob, token, i === 0, targetEl);
+                } catch (e) {
+                    console.warn('Kokoro TTS chunk failed', e);
+                    setStatus('TTS error: ' + (e && e.message || e), true);
+                    if (btn) btn.classList.remove('speaking');
+                    setIndicator(targetEl, 'remove');
+                    return;
+                }
+            }
+            if (token === cancelToken) {
+                if (btn) btn.classList.remove('speaking');
+                setStatus(describeState(), false);
+                setIndicator(targetEl, 'remove');
+            }
+        }
+
+        function playBlob(blob, token, isFirst, targetEl) {
+            return new Promise((resolve) => {
+                stopAudio();
+                if (token !== cancelToken) return resolve();
+                const url = URL.createObjectURL(blob);
+                const audio = new Audio(url);
+                currentAudio = audio;
+                currentAudioURL = url;
+                audio.onplay = () => {
+                    if (isFirst) setStatus('Speaking… ' + describeState(), false);
+                    setIndicator(targetEl, 'playing');
+                };
+                audio.onended = () => { resolve(); };
+                audio.onerror = () => {
+                    console.warn('Audio playback error');
+                    setStatus('Audio playback error — check browser volume mixer.', true);
+                    setIndicator(targetEl, 'remove');
+                    resolve();
+                };
+                audio.play().catch((e) => {
+                    console.warn('audio.play() rejected', e);
+                    setStatus('Playback blocked: ' + (e && e.message || e), true);
+                    setIndicator(targetEl, 'remove');
+                    resolve();
+                });
+            });
+        }
+
+        // Currently attached message-level indicator (small spinner /
+        // equalizer badge shown on the AI reply while its audio is being
+        // generated & played). One per active speak() call.
+        let currentIndicator = null;
+
+        function setIndicator(el, state) {
+            // Clear existing indicator if a new speak() supersedes an old one.
+            if (currentIndicator && currentIndicator !== el) {
+                currentIndicator.remove();
+                currentIndicator = null;
+            }
+            if (!el) return;
+            let node = el.querySelector(':scope > .msg-tts-indicator');
+            if (state === 'remove') {
+                if (node) node.remove();
+                if (currentIndicator === node) currentIndicator = null;
+                return;
+            }
+            if (!node) {
+                node = document.createElement('span');
+                node.className = 'msg-tts-indicator';
+                el.appendChild(node);
+            }
+            if (state === 'synthesizing') {
+                node.title = 'Generating speech…';
+                node.innerHTML = '<span class="tts-spinner" aria-hidden="true"></span><span>generating…</span>';
+            } else if (state === 'playing') {
+                node.title = 'Playing audio';
+                node.innerHTML = '<span class="tts-bars" aria-hidden="true">'
+                    + '<span></span><span></span><span></span><span></span>'
+                    + '</span><span>speaking</span>';
+            }
+            currentIndicator = node;
+        }
+
+        function speak(text, targetEl) {
+            if (!configured) return;
+            if (!enabled) {
+                // Silent-but-visible cue: user turned voice off, so tell them
+                // why nothing spoke rather than failing invisibly.
+                setStatus('Speak is off — click the speaker to enable.', false);
+                return;
+            }
+            const clean = stripForSpeech(text);
+            if (!clean) return;
+            stop();
+            const token = cancelToken;
+            setIndicator(targetEl || null, 'synthesizing');
+            // Kokoro is fast and local — no quota to worry about, so we chunk
+            // long replies just to keep first-audio latency snappy.
+            speakChunks(chunkForSpeech(clean, 2000), token, targetEl || null);
+        }
+
+        function toggle() {
+            if (!configured) return;
+            enabled = !enabled;
+            localStorage.setItem(STORE_ENABLED, enabled ? '1' : '0');
+            if (!enabled) {
+                stop();
+            } else {
+                // Audible confirmation on the user gesture — also unlocks
+                // browser audio autoplay policies for future plays.
+                const token = ++cancelToken;
+                speakChunks(['Voice on.'], token);
+            }
+            refreshUI();
+        }
+
+        function setVoice(value) {
+            const newVoice = value || 'af_heart';
+            const changed = newVoice !== preferredVoice;
+            preferredVoice = newVoice;
+            localStorage.setItem(STORE_VOICE, preferredVoice);
+            // Picking a voice is a clear signal the user wants TTS on.
+            // Auto-enable so the next AI reply actually reads aloud.
+            if (!enabled) {
+                enabled = true;
+                localStorage.setItem(STORE_ENABLED, '1');
+            }
+            refreshUI();
+            // Preview the newly chosen voice when it actually changed.
+            if (configured && changed) {
+                stop();
+                const token = ++cancelToken;
+                speakChunks(["Hey, it's GigaLib. What's up, pimp?"], token);
+            }
+        }
+
+        function init() {
+            refreshUI();
+            loadVoices();
+        }
+
+        return { init, toggle, speak, stop, setVoice, get enabled() { return enabled; } };
+    })();
+
+    function toggleTts() { GigaTTS.toggle(); }
+    function onTtsVoiceChange(voiceURI) { GigaTTS.setVoice(voiceURI); }
+
+    GigaTTS.init();
+
+    // ---------------------------------------------------------------
+    // Speech-to-text: MediaRecorder → /api/stt → chat input
+    // ---------------------------------------------------------------
+    const GigaSTT = (function () {
+        let mediaRecorder = null;
+        let chunks = [];
+        let recording = false;
+        let stream = null;
+        let configured = false;
+
+        function btn()   { return document.getElementById('micBtn'); }
+        function input() { return document.getElementById('chatInput'); }
+
+        function pickMimeType() {
+            const candidates = [
+                'audio/webm;codecs=opus',
+                'audio/webm',
+                'audio/ogg;codecs=opus',
+                'audio/mp4',
+            ];
+            for (const t of candidates) {
+                if (window.MediaRecorder && MediaRecorder.isTypeSupported(t)) return t;
+            }
+            return '';
+        }
+
+        async function init() {
+            // Hide the button entirely unless the server has a Gemini key AND
+            // the browser actually supports MediaRecorder.
+            if (!window.MediaRecorder || !navigator.mediaDevices
+                || !navigator.mediaDevices.getUserMedia) {
+                return;
+            }
+            try {
+                const resp = await fetch('/api/stt/config');
+                if (!resp.ok) return;
+                const data = await resp.json();
+                configured = !!data.configured;
+            } catch (e) {
+                console.warn('STT config fetch failed', e);
+                return;
+            }
+            if (!configured) return;
+            const b = btn();
+            if (b) b.style.display = 'inline-flex';
+        }
+
+        async function toggle() {
+            const b = btn();
+            if (!b || !configured) return;
+            if (recording) { try { mediaRecorder.stop(); } catch (e) {} return; }
+
+            try {
+                stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+            } catch (e) {
+                console.warn('getUserMedia failed', e);
+                alert('Could not access microphone: ' + (e && e.message || e));
+                return;
+            }
+            const mimeType = pickMimeType();
+            try {
+                mediaRecorder = mimeType
+                    ? new MediaRecorder(stream, { mimeType })
+                    : new MediaRecorder(stream);
+            } catch (e) {
+                console.warn('MediaRecorder init failed', e);
+                stream.getTracks().forEach(t => t.stop());
+                alert('Recorder failed: ' + (e && e.message || e));
+                return;
+            }
+            chunks = [];
+            mediaRecorder.ondataavailable = (ev) => {
+                if (ev.data && ev.data.size) chunks.push(ev.data);
+            };
+            mediaRecorder.onstop = async () => {
+                recording = false;
+                b.classList.remove('recording');
+                b.title = 'Record voice (transcribe)';
+                if (stream) stream.getTracks().forEach(t => t.stop());
+                stream = null;
+
+                const blob = new Blob(chunks, { type: mediaRecorder.mimeType || mimeType || 'audio/webm' });
+                if (!blob.size) return;
+                b.disabled = true;
+                const inp = input();
+                const oldPh = inp ? inp.placeholder : '';
+                if (inp) inp.placeholder = 'Transcribing…';
+                try {
+                    const fd = new FormData();
+                    fd.append('audio', blob, 'speech.webm');
+                    fd.append('mime_type', blob.type);
+                    const resp = await fetch('/api/stt', { method: 'POST', body: fd });
+                    if (!resp.ok) {
+                        const j = await resp.json().catch(() => ({}));
+                        throw new Error(j.error || ('HTTP ' + resp.status));
+                    }
+                    const j = await resp.json();
+                    const t = (j.transcript || '').trim();
+                    if (t && inp) {
+                        inp.value = inp.value ? (inp.value.trim() + ' ' + t) : t;
+                        inp.focus();
+                    }
+                } catch (e) {
+                    console.warn('STT failed', e);
+                    alert('Speech recognition failed: ' + (e && e.message || e));
+                } finally {
+                    b.disabled = false;
+                    if (inp) inp.placeholder = oldPh;
+                }
+            };
+            mediaRecorder.start();
+            recording = true;
+            b.classList.add('recording');
+            b.title = 'Stop recording';
+        }
+
+        return { init, toggle };
+    })();
+
+    function toggleMic() { GigaSTT.toggle(); }
+    GigaSTT.init();
+
     // AI Chat
     async function sendMessage() {
         const input = document.getElementById('chatInput');
@@ -1200,6 +1723,8 @@
                 conversationId = data.conversation_id;
                 localStorage.setItem('gigalibConversationId', conversationId);
             }
+
+            try { GigaTTS.speak(data.response, typingDiv); } catch (e) { console.warn('GigaTTS.speak threw', e); }
         } catch(e) {
             typingDiv.innerHTML = 'Sorry, something went wrong. Try again!';
             chatHistory.pop(); // remove the failed user message from history
