@@ -238,26 +238,41 @@ def _spawn_detached_restart(delay_seconds: int = 3) -> bool:
     DETACHED_PROCESS = 0x00000008
     CREATE_NEW_PROCESS_GROUP = 0x00000200
     CREATE_NO_WINDOW = 0x08000000
-    try:
-        subprocess.Popen(
-            [
-                "powershell",
-                "-NoProfile",
-                "-ExecutionPolicy",
-                "Bypass",
-                "-Command",
-                script,
-            ],
-            cwd=REPO_ROOT,
-            stdin=subprocess.DEVNULL,
-            stdout=subprocess.DEVNULL,
-            stderr=subprocess.DEVNULL,
-            creationflags=DETACHED_PROCESS | CREATE_NEW_PROCESS_GROUP | CREATE_NO_WINDOW,
-            close_fds=True,
-        )
+    CREATE_BREAKAWAY_FROM_JOB = 0x01000000
+    flags = (
+        DETACHED_PROCESS
+        | CREATE_NEW_PROCESS_GROUP
+        | CREATE_NO_WINDOW
+        | CREATE_BREAKAWAY_FROM_JOB
+    )
+
+    def _spawn(creationflags: int) -> bool:
+        try:
+            subprocess.Popen(
+                [
+                    "powershell",
+                    "-NoProfile",
+                    "-ExecutionPolicy",
+                    "Bypass",
+                    "-Command",
+                    script,
+                ],
+                cwd=REPO_ROOT,
+                stdin=subprocess.DEVNULL,
+                stdout=subprocess.DEVNULL,
+                stderr=subprocess.DEVNULL,
+                creationflags=creationflags,
+                close_fds=True,
+            )
+            return True
+        except Exception:
+            return False
+
+    # If the parent job object forbids breakaway, Popen raises with
+    # ERROR_ACCESS_DENIED. Retry without the breakaway flag so we at least try.
+    if _spawn(flags):
         return True
-    except Exception:
-        return False
+    return _spawn(flags & ~CREATE_BREAKAWAY_FROM_JOB)
 
 
 def _run_uv_sync() -> tuple[bool, str]:
