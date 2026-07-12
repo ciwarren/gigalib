@@ -1940,5 +1940,17 @@
     document.addEventListener('visibilitychange', () => {
         if (!document.hidden) checkForUpdates();
     });
+
+    // Auto-refresh the library every 60s so background syncs (Xbox
+    // playtime, new installs, etc.) surface without a manual reload. Guard
+    // against reloads while the tab is hidden or an open modal / active
+    // input would lose state.
+    setInterval(() => {
+        if (document.hidden) return;
+        if (document.querySelector('.modal.show, dialog[open]')) return;
+        const el = document.activeElement;
+        if (el && (el.tagName === 'INPUT' || el.tagName === 'TEXTAREA' || el.isContentEditable)) return;
+        window.location.reload();
+    }, 60000);
 </script>
 {% endblock %}
