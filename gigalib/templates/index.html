@@ -16,8 +16,13 @@
         text-align: left;
     }
 
-    .companion-title-stack #newChatBtn {
-        justify-self: start;
+    .companion-title-stack .assistant-actions {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 0.4rem;
+    }
+
+    .companion-title-stack .assistant-actions .btn-compact {
         margin-left: 0;
     }
 
@@ -416,7 +421,10 @@
                 <div class="companion-title-stack">
                     <h3>GigaLib</h3>
                     <div class="assistant-meta" id="companionMeta">Gemini 3.5 Flash</div>
-                    <button class="btn btn-secondary btn-compact" id="newChatBtn" onclick="startNewConversation()">New Session</button>
+                    <div class="assistant-actions" id="assistantActions">
+                        <button class="btn btn-secondary btn-compact" id="newChatBtn" onclick="startNewConversation()">New Session</button>
+                        <button class="btn btn-secondary btn-compact" id="shareChatBtn" onclick="shareConversation()" title="Copy transcript as markdown">Share</button>
+                    </div>
                 </div>
                 <div class="companion-tabs">
                     <button class="companion-tab active" id="aiTab" type="button" onclick="showCompanion('ai')">AI</button>
@@ -547,7 +555,7 @@
         document.getElementById('aiTab').classList.toggle('active', view === 'ai');
         document.getElementById('socialTab').classList.toggle('active', view === 'social');
         document.getElementById('messagesTab').classList.toggle('active', view === 'messages');
-        document.getElementById('newChatBtn').style.display = view === 'ai' ? '' : 'none';
+        document.getElementById('assistantActions').style.display = view === 'ai' ? '' : 'none';
         document.getElementById('companionMeta').textContent = meta[view] || meta.ai;
         if (view === 'messages') {
             loadRailMessages();
@@ -1000,6 +1008,58 @@
         localStorage.removeItem('gigalibConversationId');
         chatHistory = [];
         renderDefaultAssistantMessage();
+    }
+
+    function flashShareBtn(btn, text, timeout) {
+        if (!btn) return;
+        if (btn._resetTimer) clearTimeout(btn._resetTimer);
+        if (!btn.dataset.originalLabel) btn.dataset.originalLabel = btn.textContent;
+        btn.textContent = text;
+        btn._resetTimer = setTimeout(() => {
+            btn.textContent = btn.dataset.originalLabel || 'Share';
+            btn._resetTimer = null;
+        }, timeout);
+    }
+
+    function buildTranscriptMarkdown() {
+        const stamp = new Date().toLocaleString();
+        const lines = ['# GigaLib chat transcript', '', `_Exported ${stamp}_`, ''];
+        chatHistory.forEach(msg => {
+            lines.push(msg.role === 'user' ? '### You' : '### GigaLib');
+            lines.push('');
+            lines.push(String(msg.content == null ? '' : msg.content).trim());
+            lines.push('');
+        });
+        return lines.join('\n');
+    }
+
+    async function shareConversation() {
+        const btn = document.getElementById('shareChatBtn');
+        if (!chatHistory || chatHistory.length === 0) {
+            flashShareBtn(btn, 'Nothing to share', 1600);
+            return;
+        }
+        const markdown = buildTranscriptMarkdown();
+        try {
+            if (navigator.clipboard && navigator.clipboard.writeText) {
+                await navigator.clipboard.writeText(markdown);
+            } else {
+                const ta = document.createElement('textarea');
+                ta.value = markdown;
+                ta.setAttribute('readonly', '');
+                ta.style.position = 'fixed';
+                ta.style.top = '-1000px';
+                ta.style.opacity = '0';
+                document.body.appendChild(ta);
+                ta.select();
+                document.execCommand('copy');
+                document.body.removeChild(ta);
+            }
+            flashShareBtn(btn, 'Copied!', 1400);
+        } catch (e) {
+            console.warn('Share transcript failed', e);
+            flashShareBtn(btn, 'Copy failed', 1600);
+        }
     }
 
     function renderDefaultAssistantMessage() {
