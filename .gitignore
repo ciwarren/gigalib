@@ -10,3 +10,6 @@ instance/
 *.egg-info/
 dist/
 build/
+# User's local platform paths (auto-generated from platforms.example.yaml
+# by scripts/setup.ps1 and mutated by drive discovery on each run).
+/platforms.yaml

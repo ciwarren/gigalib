@@ -169,6 +169,13 @@ if ($configure -eq "y") {
 # ─────────────────────────────────────────────────────────────────────────────
 Write-Step 4 "Checking platform paths"
 
+# platforms.yaml is git-ignored and user-editable; seed it from the example
+# on first run so we never dirty the git checkout with local paths.
+if (-not (Test-Path platforms.yaml)) {
+    Copy-Item platforms.example.yaml platforms.yaml
+    Write-Ok "Created platforms.yaml from platforms.example.yaml"
+}
+
 Write-Host "  Scanning all fixed drives for launcher installs..." -ForegroundColor White
 $yaml = Get-Content platforms.yaml -Raw
 

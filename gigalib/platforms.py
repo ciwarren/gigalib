@@ -15,11 +15,19 @@ from gigalib.models import Game
 
 
 def _load_platform_config():
-    """Load platform paths from platforms.yaml in project root."""
-    config_path = Path(__file__).parent.parent / "platforms.yaml"
-    if config_path.exists():
-        with open(config_path, "r") as f:
-            return yaml.safe_load(f) or {}
+    """Load platform paths from platforms.yaml, falling back to the example.
+
+    ``platforms.yaml`` is git-ignored and generated per-machine by
+    ``scripts/setup.ps1`` (which seeds it from ``platforms.example.yaml`` and
+    then appends locally discovered paths). If a user runs the app before
+    setup, we still load usable defaults from the example file.
+    """
+    root = Path(__file__).parent.parent
+    for name in ("platforms.yaml", "platforms.example.yaml"):
+        config_path = root / name
+        if config_path.exists():
+            with open(config_path, "r") as f:
+                return yaml.safe_load(f) or {}
     return {}
 
 
