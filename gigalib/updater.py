@@ -174,7 +174,7 @@ _BG_FETCH_LOCK = threading.Lock()
 _BG_FETCH_IN_FLIGHT = False
 
 
-def maybe_background_fetch(min_interval_seconds: int = 5 * 60) -> bool:
+def maybe_background_fetch(min_interval_seconds: int = 60) -> bool:
     """Kick off a background `git fetch` if enough time has passed since the last one."""
     global _BG_FETCH_IN_FLIGHT
     if not _is_supported():

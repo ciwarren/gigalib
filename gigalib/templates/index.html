@@ -1218,8 +1218,9 @@
     }
 
     // ---- Self-update banner ---------------------------------------------
-    const UPDATE_POLL_MS = 5 * 60 * 1000;
+    const UPDATE_POLL_MS = 60 * 1000;
     let updateDismissedSha = sessionStorage.getItem('gigalibUpdateDismissedSha') || '';
+    let updateCheckInFlight = false;
 
     function escapeHtml(s) {
         return String(s == null ? '' : s)
@@ -1257,6 +1258,8 @@
     }
 
     async function checkForUpdates() {
+        if (updateCheckInFlight) return;
+        updateCheckInFlight = true;
         try {
             const resp = await fetch('/api/updates/check', { cache: 'no-store' });
             if (!resp.ok) return;
@@ -1264,6 +1267,8 @@
             renderUpdateBanner(status);
         } catch (e) {
             // network errors are non-fatal; try again next poll
+        } finally {
+            updateCheckInFlight = false;
         }
     }
 
@@ -1326,6 +1331,13 @@
     }
 
     checkForUpdates();
-    setInterval(checkForUpdates, UPDATE_POLL_MS);
+    setInterval(() => {
+        if (document.hidden) return;
+        checkForUpdates();
+    }, UPDATE_POLL_MS);
+    window.addEventListener('focus', checkForUpdates);
+    document.addEventListener('visibilitychange', () => {
+        if (!document.hidden) checkForUpdates();
+    });
 </script>
 {% endblock %}
