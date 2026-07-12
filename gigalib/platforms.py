@@ -3,6 +3,7 @@ import json
 import os
 import re
 import winreg
+import xml.etree.ElementTree as ET
 from pathlib import Path
 
 import requests
@@ -204,6 +205,81 @@ def _hydrate_xbox_catalog_items(items):
     return hydrated_items
 
 
+def _read_microsoft_game_config(config_path):
+    """Extract StoreId / TitleId / display name from a MicrosoftGame.config XML file.
+
+    Returns a dict with normalized identifiers (all lowercase) or None on failure.
+    """
+    try:
+        root = ET.parse(config_path).getroot()
+    except (ET.ParseError, OSError):
+        return None
+
+    store_id = (root.findtext("StoreId") or "").strip()
+    title_id_hex = (root.findtext("TitleId") or "").strip()
+
+    # OpenXBL returns decimal titleIds; MicrosoftGame.config stores hex (e.g. "0x00007D...").
+    title_id_dec = ""
+    if title_id_hex:
+        try:
+            title_id_dec = str(int(title_id_hex, 16))
+        except ValueError:
+            pass
+
+    shell = root.find("ShellVisuals")
+    display_name = shell.get("DefaultDisplayName", "").strip() if shell is not None else ""
+
+    return {
+        "store_id": store_id,
+        "title_id_dec": title_id_dec,
+        "title_id_hex": title_id_hex,
+        "display_name": display_name,
+    }
+
+
+def _get_installed_xbox_identifiers():
+    """Scan configured Xbox install dirs and return a set of lowercased identifiers.
+
+    Each installed game contributes any of: StoreId, decimal TitleId, install
+    folder name, and DefaultDisplayName from MicrosoftGame.config. Matching
+    against catalog/history responses is done case-insensitively.
+    """
+    identifiers = set()
+    for install_dir in _get_paths("xbox", "install_dirs"):
+        for game_dir in install_dir.iterdir():
+            if not game_dir.is_dir():
+                continue
+            # Folder name is a decent fallback title match.
+            identifiers.add(game_dir.name.strip().lower())
+
+            for candidate in (
+                game_dir / "Content" / "MicrosoftGame.config",
+                game_dir / "MicrosoftGame.config",
+            ):
+                if not candidate.exists():
+                    continue
+                info = _read_microsoft_game_config(candidate)
+                if info:
+                    if info["store_id"]:
+                        identifiers.add(info["store_id"].lower())
+                    if info["title_id_dec"]:
+                        identifiers.add(info["title_id_dec"].lower())
+                    if info["display_name"]:
+                        identifiers.add(info["display_name"].lower())
+                break
+    return identifiers
+
+
+def _xbox_is_installed(title_id, title_name, installed_ids):
+    if not installed_ids:
+        return False
+    if title_id and str(title_id).lower() in installed_ids:
+        return True
+    if title_name and title_name.strip().lower() in installed_ids:
+        return True
+    return False
+
+
 _XBOX_COLLECTION_TITLES = {
     "all console games",
 }
@@ -220,6 +296,7 @@ def _sync_xbox_game_record(
     last_played="",
     playtime_hours=None,
     is_gamepass=False,
+    is_installed=False,
 ):
     if _is_xbox_collection_title(title_name):
         return False
@@ -236,6 +313,7 @@ def _sync_xbox_game_record(
                 last_played=last_played,
                 playtime_hours=playtime_hours,
                 is_gamepass=is_gamepass,
+                is_installed=is_installed,
             )
         )
         return True
@@ -249,6 +327,9 @@ def _sync_xbox_game_record(
     if playtime_hours is not None:
         existing.playtime_hours = playtime_hours
     existing.is_gamepass = is_gamepass or bool(existing.is_gamepass)
+    # Always recompute install state from the current local scan so uninstalls
+    # are reflected on the next sync.
+    existing.is_installed = is_installed
     return False
 
 
@@ -349,6 +430,8 @@ def sync_xbox():
         )
         catalog_titles = _hydrate_xbox_catalog_items(catalog_titles)
 
+        installed_ids = _get_installed_xbox_identifiers()
+
         added = 0
         skipped_catalog = 0
         matched_history = set()
@@ -367,6 +450,7 @@ def sync_xbox():
                 title_name=title_name,
                 image_url=image_url,
                 is_gamepass=True,
+                is_installed=_xbox_is_installed(title_id, title_name, installed_ids),
             ):
                 added += 1
 
@@ -384,14 +468,16 @@ def sync_xbox():
                 title.get("stats", {}).get("minutesPlayed")
             )
             image_url = _xbox_image_url(title)
+            title_name = _xbox_title_name(title)
 
             if _sync_xbox_game_record(
                 title_id=title_id,
-                title_name=_xbox_title_name(title),
+                title_name=title_name,
                 image_url=image_url,
                 last_played=last_played,
                 playtime_hours=playtime_hours,
                 is_gamepass=bool((title.get("gamePass") or {}).get("isGamePass")),
+                is_installed=_xbox_is_installed(title_id, title_name, installed_ids),
             ):
                 added += 1
 
@@ -402,6 +488,7 @@ def sync_xbox():
             "catalog_skipped_unknown": skipped_catalog,
             "history_total": len(history_titles),
             "matched_history": len(matched_history),
+            "installed_detected": len(installed_ids),
             "added": added,
         }
 

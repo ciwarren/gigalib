@@ -169,29 +169,119 @@ if ($configure -eq "y") {
 # ─────────────────────────────────────────────────────────────────────────────
 Write-Step 4 "Checking platform paths"
 
-Write-Host "  Verifying paths in platforms.yaml..." -ForegroundColor White
+Write-Host "  Scanning all fixed drives for launcher installs..." -ForegroundColor White
 $yaml = Get-Content platforms.yaml -Raw
 
-# Check Steam
-$steamPaths = @("C:\Program Files (x86)\Steam", "D:\SteamLibrary")
-foreach ($p in $steamPaths) {
-    if (Test-Path $p) { Write-Ok "Steam: $p" }
+$fixedDrives = Get-PSDrive -PSProvider FileSystem |
+    Where-Object { $_.Root -match '^[A-Z]:\\$' } |
+    Select-Object -ExpandProperty Root
+
+function Find-OnDrives {
+    param(
+        [string[]]$Subpaths,
+        [string]$RequireChild = $null
+    )
+    $found = @()
+    foreach ($root in $fixedDrives) {
+        foreach ($sub in $Subpaths) {
+            $candidate = Join-Path $root $sub
+            if (-not (Test-Path $candidate)) { continue }
+            if ($RequireChild -and -not (Test-Path (Join-Path $candidate $RequireChild))) { continue }
+            $found += $candidate
+        }
+    }
+    return $found
 }
 
-# Check EA
-if (Test-Path "C:\ProgramData\EA Desktop\InstallData") {
-    Write-Ok "EA Desktop: InstallData found"
-} else {
-    Write-Warn "EA Desktop: InstallData not found (EA Desktop may not be installed)"
+function Add-YamlListEntries {
+    param(
+        [ref]$YamlText,
+        [string]$Section,
+        [string]$Key,
+        [string[]]$Paths
+    )
+    $current = $YamlText.Value
+    $missing = @()
+    foreach ($p in $Paths) {
+        $escaped = $p -replace '\\', '\\'
+        if ($current -notmatch [regex]::Escape($escaped)) {
+            $missing += $p
+        }
+    }
+    if ($missing.Count -eq 0) { return @() }
+
+    $insertion = ($missing | ForEach-Object { '    - "' + ($_ -replace '\\', '\\') + '"' }) -join "`n"
+    $pattern = "(?ms)^(" + [regex]::Escape($Section) + ":\r?\n(?:.*?\r?\n)*?\s*" + [regex]::Escape($Key) + ":\r?\n)"
+    if ($current -match $pattern) {
+        $current = [regex]::Replace(
+            $current,
+            $pattern,
+            { param($m) $m.Groups[1].Value + $insertion + "`n" }
+        )
+    } else {
+        if (-not $current.EndsWith("`n")) { $current += "`n" }
+        $current += "`n" + $Section + ":`n  " + $Key + ":`n" + $insertion + "`n"
+    }
+    $YamlText.Value = $current
+    return $missing
 }
 
-# Check Ubisoft
-$ubiPath = "C:\Program Files (x86)\Ubisoft\Ubisoft Game Launcher"
-if (Test-Path $ubiPath) {
-    Write-Ok "Ubisoft Connect: $ubiPath"
-} else {
-    Write-Warn "Ubisoft Connect: not found at default path"
+function Report-Platform {
+    param(
+        [string]$Label,
+        [string[]]$Found,
+        [string[]]$Added,
+        [string]$MissingHint
+    )
+    if ($Found.Count -eq 0) {
+        Write-Warn ("{0}: {1}" -f $Label, $MissingHint)
+        return
+    }
+    foreach ($p in $Found) { Write-Ok ("{0}: {1}" -f $Label, $p) }
+    foreach ($p in $Added) { Write-Ok ("Added to platforms.yaml: {0}" -f $p) }
 }
+
+# Steam: main install OR library folder — both contain a steamapps\ subdir.
+$steamFound = Find-OnDrives -Subpaths @(
+    'Program Files (x86)\Steam',
+    'Steam',
+    'SteamLibrary',
+    'Games\SteamLibrary'
+) -RequireChild 'steamapps'
+$steamAdded = Add-YamlListEntries -YamlText ([ref]$yaml) -Section 'steam' -Key 'paths' -Paths $steamFound
+Report-Platform 'Steam' $steamFound $steamAdded 'no Steam install or library found'
+
+# EA Desktop metadata (InstallData) — usually only C:, but scan anyway.
+$eaInstall = Find-OnDrives -Subpaths @('ProgramData\EA Desktop\InstallData')
+$eaInstallAdded = Add-YamlListEntries -YamlText ([ref]$yaml) -Section 'ea' -Key 'install_data' -Paths $eaInstall
+Report-Platform 'EA Desktop InstallData' $eaInstall $eaInstallAdded 'EA Desktop not detected'
+
+# EA game install folders.
+$eaGames = Find-OnDrives -Subpaths @('Program Files\EA Games', 'EA Games')
+$eaGamesAdded = Add-YamlListEntries -YamlText ([ref]$yaml) -Section 'ea' -Key 'games_dirs' -Paths $eaGames
+Report-Platform 'EA game directories' $eaGames $eaGamesAdded 'no EA game directory found (optional)'
+
+# Ubisoft Connect config cache.
+$ubiConfig = Find-OnDrives -Subpaths @(
+    'Program Files (x86)\Ubisoft\Ubisoft Game Launcher\cache\configuration\configurations'
+)
+$ubiConfigAdded = Add-YamlListEntries -YamlText ([ref]$yaml) -Section 'ubisoft' -Key 'config_cache' -Paths $ubiConfig
+Report-Platform 'Ubisoft Connect config' $ubiConfig $ubiConfigAdded 'Ubisoft Connect not detected'
+
+# Ubisoft game install folders.
+$ubiGames = Find-OnDrives -Subpaths @(
+    'Program Files (x86)\Ubisoft\Ubisoft Game Launcher\games',
+    'Ubisoft\Ubisoft Game Launcher\games'
+)
+$ubiGamesAdded = Add-YamlListEntries -YamlText ([ref]$yaml) -Section 'ubisoft' -Key 'games_dirs' -Paths $ubiGames
+Report-Platform 'Ubisoft game directories' $ubiGames $ubiGamesAdded 'no Ubisoft game directory found (optional)'
+
+# Xbox / Game Pass PC install dirs.
+$xboxDirs = Find-OnDrives -Subpaths @('XboxGames')
+$xboxAdded = Add-YamlListEntries -YamlText ([ref]$yaml) -Section 'xbox' -Key 'install_dirs' -Paths $xboxDirs
+Report-Platform 'Xbox / Game Pass PC' $xboxDirs $xboxAdded 'no XboxGames folder found on any fixed drive'
+
+Set-Content platforms.yaml $yaml -NoNewline
 
 Write-Host ""
 Write-Host "  Edit platforms.yaml to add/change paths for your system." -ForegroundColor DarkGray

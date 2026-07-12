@@ -4,6 +4,7 @@
 steam:
   paths:
     - "C:\\Program Files (x86)\\Steam"
+    - "D:\\Program Files (x86)\\Steam"
     - "D:\\SteamLibrary"
 
 ea:
@@ -17,3 +18,11 @@ ubisoft:
     - "C:\\Program Files (x86)\\Ubisoft\\Ubisoft Game Launcher\\cache\\configuration\\configurations"
   games_dirs:
     - "C:\\Program Files (x86)\\Ubisoft\\Ubisoft Game Launcher\\games"
+
+xbox:
+  # Xbox / Game Pass PC installs each game under a folder here that contains
+  # Content\MicrosoftGame.config (StoreId + TitleId). Add extra drives if you
+  # moved the install location in the Xbox app.
+  install_dirs:
+    - "C:\\XboxGames"
+    - "D:\\XboxGames"
