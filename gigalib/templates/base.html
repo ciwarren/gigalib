@@ -342,6 +342,16 @@
             letter-spacing: 0.02em;
             line-height: 1.5;
             color: var(--accent-3);
+            transition: color 0.2s ease;
+        }
+
+        .stat-card .value.stat-flash {
+            animation: statFlash 1.2s ease-out;
+        }
+
+        @keyframes statFlash {
+            0%   { color: var(--accent-1, #7cf); text-shadow: 0 0 12px var(--accent-1, #7cf); }
+            100% { color: var(--accent-3); text-shadow: none; }
         }
 
         .stat-card .sub {

@@ -484,22 +484,22 @@
     <div class="stat-grid">
         <div class="stat-card">
             <div class="label">Total games</div>
-            <div class="value">{{ stats.total_games }}</div>
+            <div class="value" id="statTotalGames" data-stat="total_games">{{ stats.total_games }}</div>
             <div class="sub">Everything in one place.</div>
         </div>
         <div class="stat-card">
             <div class="label">Installed</div>
-            <div class="value">{{ stats.installed_games }}</div>
+            <div class="value" id="statInstalledGames" data-stat="installed_games">{{ stats.installed_games }}</div>
             <div class="sub">Ready to launch now.</div>
         </div>
         <div class="stat-card">
             <div class="label">Unplayed</div>
-            <div class="value">{{ stats.unplayed_games }}</div>
+            <div class="value" id="statUnplayedGames" data-stat="unplayed_games">{{ stats.unplayed_games }}</div>
             <div class="sub">Fresh picks waiting.</div>
         </div>
         <div class="stat-card">
             <div class="label">Playtime</div>
-            <div class="value">{{ stats.total_playtime_hours }}h</div>
+            <div class="value" id="statPlaytimeHours" data-stat="total_playtime_hours" data-suffix="h">{{ stats.total_playtime_hours }}h</div>
             <div class="sub">Collected across the library.</div>
         </div>
     </div>
@@ -1941,16 +1941,35 @@
         if (!document.hidden) checkForUpdates();
     });
 
-    // Auto-refresh the library every 60s so background syncs (Xbox
-    // playtime, new installs, etc.) surface without a manual reload. Guard
-    // against reloads while the tab is hidden or an open modal / active
-    // input would lose state.
-    setInterval(() => {
+    // Live-refresh the stat cards every 60s so background syncs (Xbox
+    // playtime, new installs, GameDVR last-played updates) surface without
+    // disturbing the rest of the page. Silent no-op on failure.
+    async function refreshLibraryStats() {
         if (document.hidden) return;
-        if (document.querySelector('.modal.show, dialog[open]')) return;
-        const el = document.activeElement;
-        if (el && (el.tagName === 'INPUT' || el.tagName === 'TEXTAREA' || el.isContentEditable)) return;
-        window.location.reload();
-    }, 60000);
+        try {
+            const resp = await fetch('/api/library/stats', { cache: 'no-store' });
+            if (!resp.ok) return;
+            const stats = await resp.json();
+            document.querySelectorAll('.stat-card [data-stat]').forEach((el) => {
+                const key = el.dataset.stat;
+                if (!(key in stats)) return;
+                const suffix = el.dataset.suffix || '';
+                const next = String(stats[key]) + suffix;
+                if (el.textContent !== next) {
+                    el.textContent = next;
+                    el.classList.remove('stat-flash');
+                    // Force reflow so the animation replays.
+                    void el.offsetWidth;
+                    el.classList.add('stat-flash');
+                }
+            });
+        } catch (e) {
+            // Ignore transient fetch failures.
+        }
+    }
+    setInterval(refreshLibraryStats, 60000);
+    document.addEventListener('visibilitychange', () => {
+        if (!document.hidden) refreshLibraryStats();
+    });
 </script>
 {% endblock %}

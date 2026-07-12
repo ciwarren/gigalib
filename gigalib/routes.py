@@ -396,6 +396,12 @@ def index():
     return resp
 
 
+@main_bp.route("/api/library/stats")
+def library_stats():
+    all_games = _game_records_query()
+    return jsonify(_library_stats(all_games))
+
+
 @main_bp.route("/conversations")
 def conversations_page():
     _queue_app_open_sync()
