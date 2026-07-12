@@ -364,7 +364,36 @@ if ($LASTEXITCODE -eq 0) {
 }
 
 # ─────────────────────────────────────────────────────────────────────────────
-Write-Step 7 "Installing app startup task"
+Write-Step 7 "Xbox playtime (optional one-time browser login)"
+
+Write-Host "  OpenXBL's free tier does not expose per-title MinutesPlayed,"    -ForegroundColor White
+Write-Host "  so Xbox playtime hours come from Xbox Live directly via a"       -ForegroundColor White
+Write-Host "  one-time OAuth sign-in against the shipped public client id."    -ForegroundColor White
+Write-Host "  Your browser will open, you approve consent once, and tokens"    -ForegroundColor White
+Write-Host "  land in instance\xbox_tokens.json (git-ignored, auto-refreshed)." -ForegroundColor White
+Write-Host ""
+Write-Host "  Skip if you don't have an Xbox account or want to do it later" -ForegroundColor DarkGray
+Write-Host "  by running:  uv run python -m gigalib.xbox_stats login"          -ForegroundColor DarkGray
+Write-Host ""
+
+$xboxTokensPath = Join-Path (Get-Location) "instance\xbox_tokens.json"
+if (Test-Path $xboxTokensPath) {
+    Write-Ok "Xbox Live tokens already exist ($xboxTokensPath) — skipping login"
+} else {
+    $doXboxLogin = Read-Host "  Sign in to Xbox Live now? (y/n)"
+    if ($doXboxLogin -eq "y") {
+        uv run python -m gigalib.xbox_stats login
+        if ($LASTEXITCODE -eq 0 -and (Test-Path $xboxTokensPath)) {
+            Write-Ok "Xbox Live login complete"
+        } else {
+            Write-Warn "Xbox login did not complete — you can retry any time with:"
+            Write-Warn "  uv run python -m gigalib.xbox_stats login"
+        }
+    }
+}
+
+# ─────────────────────────────────────────────────────────────────────────────
+Write-Step 8 "Installing app startup task"
 
 $installTasks = Read-Host "  Install Windows startup task for GigaLib? (y/n)"
 if ($installTasks -eq "y") {
@@ -377,7 +406,7 @@ if ($installTasks -eq "y") {
 }
 
 # ─────────────────────────────────────────────────────────────────────────────
-Write-Step 8 "Done!"
+Write-Step 9 "Done!"
 
 Write-Host ""
 Write-Host "  GigaLib is ready to go!" -ForegroundColor Green
