@@ -214,13 +214,25 @@ def _dep_files_changed(current_sha: str, latest_sha: str) -> bool:
 
 
 def _spawn_detached_restart(delay_seconds: int = 3) -> bool:
-    """Fire-and-forget detached PowerShell that restarts the scheduled task."""
+    """Fire-and-forget detached PowerShell that restarts the scheduled task.
+
+    Ends the task, waits for the previous listener on the app port to release,
+    then re-runs the task. Without the port-release wait, the new instance
+    often loses the bind race and exits, leaving nothing on the port.
+    """
     if sys.platform != "win32":
         return False
+    app_port = int(os.environ.get("GIGALIB_PORT", "5000"))
+    # PowerShell script: end task, poll until port is free (max 20s), then run.
     script = (
         f"Start-Sleep -Seconds {int(delay_seconds)}; "
         f"schtasks /end /tn '{TASK_NAME}' | Out-Null; "
-        "Start-Sleep -Seconds 1; "
+        f"$deadline = (Get-Date).AddSeconds(20); "
+        f"while ((Get-Date) -lt $deadline) {{ "
+        f"  $listener = Get-NetTCPConnection -LocalPort {app_port} -State Listen -ErrorAction SilentlyContinue; "
+        f"  if (-not $listener) {{ break }}; "
+        f"  Start-Sleep -Milliseconds 500 "
+        f"}}; "
         f"schtasks /run /tn '{TASK_NAME}' | Out-Null"
     )
     DETACHED_PROCESS = 0x00000008
