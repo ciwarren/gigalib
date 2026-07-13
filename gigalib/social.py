@@ -379,7 +379,31 @@ def canonical_title(title):
     )
     text = re.sub(r"\bedition\b", " ", text)
     text = re.sub(r"[^a-z0-9]+", " ", text)
+    text = replace_roman_numerals(text)
     return " ".join(text.split())
+
+
+# Whitelist of Roman numerals we translate when normalizing titles. Limited
+# to multi-letter forms II-XX so common single-letter tokens ("I Am
+# Setsuna", "V Rising", "X-COM") and words that happen to be valid Romans
+# ("civ" = 104, "mix", "did") are never falsely rewritten. This lets
+# "Final Fantasy VII" match "Final Fantasy 7" across platforms.
+_ROMAN_TO_ARABIC = {
+    "ii": "2", "iii": "3", "iv": "4", "vi": "6", "vii": "7",
+    "viii": "8", "ix": "9", "xi": "11", "xii": "12", "xiii": "13",
+    "xiv": "14", "xv": "15", "xvi": "16", "xvii": "17", "xviii": "18",
+    "xix": "19", "xx": "20",
+}
+_ROMAN_PATTERN = re.compile(
+    r"\b(" + "|".join(sorted(_ROMAN_TO_ARABIC, key=len, reverse=True)) + r")\b"
+)
+
+
+def replace_roman_numerals(text):
+    """Translate whitelisted Roman numeral tokens to Arabic digits."""
+    if not text:
+        return text
+    return _ROMAN_PATTERN.sub(lambda m: _ROMAN_TO_ARABIC[m.group(1)], text)
 
 
 def split_tags(tags):

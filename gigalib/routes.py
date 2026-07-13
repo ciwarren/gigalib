@@ -22,7 +22,8 @@ from gigalib.social import (SocialServiceError, accept_remote_friend_request,
                             list_remote_friend_requests, list_remote_friends,
                             list_remote_messages, login_remote_account,
                             remove_remote_friend,
-                            register_remote_account, search_remote_users,
+                            register_remote_account, replace_roman_numerals,
+                            search_remote_users,
                             send_remote_friend_request, send_remote_message,
                             social_overview, sync_local_social_snapshot,
                             sync_remote_social_snapshot,
@@ -129,7 +130,8 @@ def _conversation_summary(conversation):
 
 
 def _title_key(title):
-    return re.sub(r"[^a-z0-9]+", " ", (title or "").lower()).strip()
+    text = re.sub(r"[^a-z0-9]+", " ", (title or "").lower()).strip()
+    return replace_roman_numerals(text)
 
 
 _NON_GAME_TITLES = {
