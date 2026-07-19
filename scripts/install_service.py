@@ -13,7 +13,8 @@ import subprocess
 import sys
 
 APP_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
-PYTHON_EXE = os.path.join(APP_DIR, ".venv", "Scripts", "python.exe")
+# Use pythonw.exe so scheduled tasks run without popping up a console window.
+PYTHON_EXE = os.path.join(APP_DIR, ".venv", "Scripts", "pythonw.exe")
 SERVE_SCRIPT = os.path.join(APP_DIR, "scripts", "serve.py")
 SERVE_SOCIAL_SCRIPT = os.path.join(APP_DIR, "scripts", "serve_social.py")
 
