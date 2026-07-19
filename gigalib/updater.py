@@ -20,6 +20,11 @@ DEFAULT_REMOTE = "origin"
 DEFAULT_BRANCH = "main"
 TASK_NAME = os.environ.get("GIGALIB_TASK_NAME", "GigaLib")
 
+# When the app is launched via pythonw.exe (no parent console), any child
+# console program (git, uv, schtasks, ...) will pop its own cmd window unless
+# we pass CREATE_NO_WINDOW. Only meaningful on Windows; 0 elsewhere.
+_NO_WINDOW = 0x08000000 if sys.platform == "win32" else 0
+
 _STATE_LOCK = threading.Lock()
 _STATE: dict[str, Any] = {
     "current_sha": None,
@@ -51,6 +56,7 @@ def _run_git(*args: str, timeout: int = 30) -> subprocess.CompletedProcess:
         capture_output=True,
         text=True,
         timeout=timeout,
+        creationflags=_NO_WINDOW,
     )
 
 
@@ -291,6 +297,7 @@ def _run_uv_sync() -> tuple[bool, str]:
             capture_output=True,
             text=True,
             timeout=600,
+            creationflags=_NO_WINDOW,
         )
     except subprocess.TimeoutExpired:
         return False, "uv sync timed out"
