@@ -463,6 +463,138 @@
         color: var(--accent-2);
         font-size: 0.75rem;
     }
+
+    /* --- Random game wheel --- */
+    .filter-btn-random {
+        background: linear-gradient(180deg, #ff9a5c, #ff7ab6) !important;
+        color: #1a0820 !important;
+        border-color: rgba(255, 154, 92, 0.5) !important;
+    }
+    .filter-btn-random:hover {
+        filter: brightness(1.08);
+        transform: translateY(-1px);
+    }
+
+    .random-wheel-modal {
+        max-width: 420px;
+        text-align: center;
+    }
+    .random-wheel-modal h3 {
+        margin-bottom: 0.9rem;
+    }
+
+    .wheel-stage {
+        position: relative;
+        width: 300px;
+        height: 300px;
+        margin: 0.2rem auto 1rem;
+    }
+
+    .wheel-pointer {
+        position: absolute;
+        top: -6px;
+        left: 50%;
+        transform: translateX(-50%);
+        width: 0;
+        height: 0;
+        border-left: 14px solid transparent;
+        border-right: 14px solid transparent;
+        border-top: 24px solid var(--accent-3);
+        filter: drop-shadow(0 2px 6px rgba(0, 0, 0, 0.55));
+        z-index: 3;
+    }
+
+    .wheel {
+        width: 100%;
+        height: 100%;
+        border-radius: 50%;
+        position: relative;
+        background: conic-gradient(
+            #53f77d 0deg 45deg,
+            #4ec9ff 45deg 90deg,
+            #ffd447 90deg 135deg,
+            #ff7ab6 135deg 180deg,
+            #a97cff 180deg 225deg,
+            #79ff9d 225deg 270deg,
+            #ff9a5c 270deg 315deg,
+            #6ee7ff 315deg 360deg
+        );
+        box-shadow:
+            inset 0 0 0 3px rgba(255, 255, 255, 0.08),
+            inset 0 0 0 10px rgba(0, 0, 0, 0.28),
+            0 12px 34px rgba(0, 0, 0, 0.5);
+        transform: rotate(0deg);
+        will-change: transform;
+    }
+
+    .wheel::after {
+        content: '';
+        position: absolute;
+        top: 50%;
+        left: 50%;
+        width: 62px;
+        height: 62px;
+        transform: translate(-50%, -50%);
+        border-radius: 50%;
+        background: radial-gradient(circle, #ffffff 0%, var(--accent) 55%, #08130f 100%);
+        box-shadow: 0 0 16px rgba(83, 247, 125, 0.6);
+    }
+
+    .wheel-spokes {
+        position: absolute;
+        inset: 0;
+        border-radius: 50%;
+        pointer-events: none;
+        background:
+            conic-gradient(
+                from 0deg,
+                rgba(0, 0, 0, 0.35) 0 1deg, transparent 1deg 45deg,
+                rgba(0, 0, 0, 0.35) 45deg 46deg, transparent 46deg 90deg,
+                rgba(0, 0, 0, 0.35) 90deg 91deg, transparent 91deg 135deg,
+                rgba(0, 0, 0, 0.35) 135deg 136deg, transparent 136deg 180deg,
+                rgba(0, 0, 0, 0.35) 180deg 181deg, transparent 181deg 225deg,
+                rgba(0, 0, 0, 0.35) 225deg 226deg, transparent 226deg 270deg,
+                rgba(0, 0, 0, 0.35) 270deg 271deg, transparent 271deg 315deg,
+                rgba(0, 0, 0, 0.35) 315deg 316deg, transparent 316deg 360deg
+            );
+    }
+
+    @keyframes wheelPop {
+        0%   { transform: scale(0.6); opacity: 0; }
+        60%  { transform: scale(1.08); opacity: 1; }
+        100% { transform: scale(1); opacity: 1; }
+    }
+
+    .wheel-result {
+        min-height: 3.2rem;
+        opacity: 0;
+        transform: scale(0.6);
+        transition: opacity 0.25s ease, transform 0.25s ease;
+        margin-bottom: 0.4rem;
+    }
+    .wheel-result.show {
+        opacity: 1;
+        transform: scale(1);
+        animation: wheelPop 0.5s ease;
+    }
+    .wheel-winner-label {
+        font-family: 'Press Start 2P', monospace;
+        font-size: 0.62rem;
+        letter-spacing: 0.08em;
+        color: var(--accent-3);
+        margin-bottom: 0.45rem;
+    }
+    .wheel-winner-title {
+        font-size: 1.1rem;
+        font-weight: 700;
+        color: var(--text-primary);
+        word-break: break-word;
+    }
+
+    .wheel-empty {
+        color: var(--text-secondary);
+        font-size: 0.85rem;
+    }
 </style>
 
 <div class="update-banner" id="updateBanner" role="status" aria-live="polite">
@@ -518,6 +650,7 @@
                     {% endfor %}
                     <button class="filter-btn" id="installedToggle" onclick="toggleInstalled()">Installed</button>
                     <button class="filter-btn" id="multiplayerToggle" onclick="toggleMultiplayer()">Multiplayer</button>
+                    <button class="filter-btn filter-btn-random" type="button" onclick="spinRandomGame()" title="Spin the wheel for a random game">Random</button>
                     <select id="sortSelect" class="control-select" onchange="sortGames(this.value)">
                         <option value="title-asc">A → Z</option>
                         <option value="title-desc">Z → A</option>
@@ -709,6 +842,24 @@
         </div>
         <div class="rail-friends-list" id="railFriendsModalList">
             <div class="social-mini-item">No friends loaded.</div>
+        </div>
+    </div>
+</div>
+
+<div class="modal-overlay" id="randomWheelModal" onclick="closeRandomWheel(event)">
+    <div class="modal random-wheel-modal" role="dialog" aria-modal="true" aria-labelledby="randomWheelTitle">
+        <h3 id="randomWheelTitle">Spin for a game!</h3>
+        <div class="wheel-stage">
+            <div class="wheel-pointer" aria-hidden="true"></div>
+            <div class="wheel" id="randomWheel" aria-hidden="true">
+                <div class="wheel-spokes"></div>
+            </div>
+        </div>
+        <div class="wheel-result" id="wheelResult" aria-live="polite"></div>
+        <div class="modal-actions">
+            <button class="btn btn-secondary" type="button" onclick="closeRandomWheel()">Close</button>
+            <button class="btn btn-secondary" type="button" id="wheelSpinBtn" onclick="spinRandomGame()">Spin again</button>
+            <button class="btn btn-primary" type="button" id="wheelPlayBtn" onclick="playRandomResult()" disabled>Show me</button>
         </div>
     </div>
 </div>
@@ -1971,5 +2122,92 @@
     document.addEventListener('visibilitychange', () => {
         if (!document.hidden) refreshLibraryStats();
     });
+
+    // --- Random game wheel ---
+    let _wheelSpinning = false;
+
+    function spinRandomGame() {
+        if (_wheelSpinning) return;
+        const modal = document.getElementById('randomWheelModal');
+        const wheel = document.getElementById('randomWheel');
+        const resultEl = document.getElementById('wheelResult');
+        const playBtn = document.getElementById('wheelPlayBtn');
+        const spinBtn = document.getElementById('wheelSpinBtn');
+        if (!modal || !wheel || !resultEl || !playBtn) return;
+
+        const cards = Array.from(document.querySelectorAll('.game-card'))
+            .filter(c => c.style.display !== 'none');
+
+        // Reset visible state
+        resultEl.classList.remove('show');
+        resultEl.textContent = '';
+        playBtn.disabled = true;
+        playBtn.dataset.gameId = '';
+        modal.classList.add('active');
+
+        if (!cards.length) {
+            const msg = document.createElement('div');
+            msg.className = 'wheel-empty';
+            msg.textContent = 'No games match your current filters. Clear them and try again!';
+            resultEl.appendChild(msg);
+            resultEl.classList.add('show');
+            if (spinBtn) spinBtn.disabled = false;
+            return;
+        }
+
+        const winner = cards[Math.floor(Math.random() * cards.length)];
+        const segCount = 8;
+        const segAngle = 360 / segCount;
+        const winnerSlot = Math.floor(Math.random() * segCount);
+        const spins = 5 + Math.floor(Math.random() * 3);
+        const jitter = (Math.random() - 0.5) * (segAngle * 0.6);
+        const target = spins * 360 - (winnerSlot * segAngle + segAngle / 2) + jitter;
+
+        wheel.style.transition = 'none';
+        wheel.style.transform = 'rotate(0deg)';
+        void wheel.offsetWidth;
+
+        _wheelSpinning = true;
+        if (spinBtn) spinBtn.disabled = true;
+        requestAnimationFrame(() => {
+            wheel.style.transition = 'transform 4s cubic-bezier(0.17, 0.67, 0.24, 1)';
+            wheel.style.transform = `rotate(${target}deg)`;
+        });
+
+        setTimeout(() => {
+            const label = document.createElement('div');
+            label.className = 'wheel-winner-label';
+            label.textContent = "IT'S...";
+            const title = document.createElement('div');
+            title.className = 'wheel-winner-title';
+            title.textContent = winner.dataset.title || 'A mystery game';
+            resultEl.textContent = '';
+            resultEl.append(label, title);
+            resultEl.classList.add('show');
+
+            const match = (winner.getAttribute('onclick') || '').match(/showGameDetail\((\d+)\)/);
+            if (match) {
+                playBtn.dataset.gameId = match[1];
+                playBtn.disabled = false;
+            }
+            if (spinBtn) spinBtn.disabled = false;
+            _wheelSpinning = false;
+        }, 4100);
+    }
+
+    function playRandomResult() {
+        const btn = document.getElementById('wheelPlayBtn');
+        const gid = btn && btn.dataset.gameId;
+        closeRandomWheel();
+        if (gid && typeof showGameDetail === 'function') {
+            showGameDetail(Number(gid));
+        }
+    }
+
+    function closeRandomWheel(event) {
+        if (event && event.target.id !== 'randomWheelModal') return;
+        if (_wheelSpinning) return;
+        document.getElementById('randomWheelModal')?.classList.remove('active');
+    }
 </script>
 {% endblock %}
