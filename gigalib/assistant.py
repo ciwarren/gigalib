@@ -371,7 +371,7 @@ def ask_assistant(user_message, games, history=None, social_context=None):
 
     contents.append(types.Content(role="user", parts=[types.Part(text=user_message)]))
 
-    models_to_try = ["gemini-3.5-flash", "gemini-3.6-flash"]
+    models_to_try = ["gemini-flash-latest", "gemini-flash-lite-latest"]
     last_error = None
 
     for model in models_to_try:
